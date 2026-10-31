@@ -1,0 +1,600 @@
+/*
+ * EVER shared UI: tokens + base components for exploration AND combat.
+ * Spec: docs/ART_BIBLE.md section 9. Values mirror PALETTE/FONTS in style.js.
+ * Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Fonts: load in the page <head> (non-blocking, the game works without them):
+ *   <link rel="preconnect" href="https://fonts.googleapis.com">
+ *   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+ *   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&family=Young+Serif&display=swap">
+ */
+
+:root {
+	/* palette (ART_BIBLE 3) */
+	--ever-paper: #F2E8D5;
+	--ever-ink: #2B2A33;
+	--ever-ember: #E4572E;
+	--ever-slate: #4F6D8A;
+	--ever-moss: #6A994E;
+	--ever-dusk: #F6C28B;
+	--ever-gold: #E9B44C;
+	--ever-doubt: #7D6B91;
+	--ever-ward: #A9CCE3;
+	--ever-haze: #8E9DB3;
+
+	/* card types */
+	--ever-card-attack: var(--ever-ember);
+	--ever-card-skill: var(--ever-slate);
+	--ever-card-power: var(--ever-moss);
+	--ever-card-curse: var(--ever-doubt);
+	--ever-card-token: var(--ever-gold);
+	--ever-card-status: var(--ever-haze);
+
+	/* seats 1..4 */
+	--ever-seat-1: var(--ever-ember);
+	--ever-seat-2: var(--ever-slate);
+	--ever-seat-3: var(--ever-moss);
+	--ever-seat-4: var(--ever-gold);
+
+	/* derived UI tones */
+	--ever-paper-2: #E7DBC3;       /* pressed / alternate rows */
+	--ever-ink-soft: #55535F;      /* secondary text on paper */
+	--ever-ink-a85: rgba(43, 42, 51, 0.85);
+	--ever-scrim: rgba(43, 42, 51, 0.55);
+
+	/* type */
+	--ever-font-display: 'Young Serif', Georgia, 'Times New Roman', serif;
+	--ever-font-ui: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--ever-fs-xs: 12px;
+	--ever-fs-sm: 14px;
+	--ever-fs-md: 16px;
+	--ever-fs-lg: 20px;
+	--ever-fs-xl: 28px;
+	--ever-fs-title: clamp(48px, 10vw, 96px);
+
+	/* shape */
+	--ever-radius: 10px;
+	--ever-radius-sm: 6px;
+	--ever-radius-pill: 999px;
+	--ever-border: 2px solid var(--ever-ink);
+	--ever-shadow: 0 3px 0 var(--ever-ink-a85);      /* the hard "page stack" */
+	--ever-shadow-lg: 0 5px 0 var(--ever-ink-a85);
+	--ever-shadow-press: 0 1px 0 var(--ever-ink-a85);
+	--ever-rule: inset 0 0 0 4px var(--ever-paper), inset 0 0 0 5px rgba(43, 42, 51, 0.25);
+	--ever-gutter: 16px;
+	--ever-tap: 44px;
+
+	/* motion (ART_BIBLE 10) */
+	--ever-ease: cubic-bezier(0.65, 0, 0.35, 1);
+	--ever-t-fast: 120ms;
+	--ever-t-med: 220ms;
+	--ever-t-slow: 600ms;
+
+	color-scheme: light;
+}
+
+/* ---------- base ---------- */
+
+.ever-ui,
+.ever-ui *,
+.ever-ui *::before,
+.ever-ui *::after { box-sizing: border-box; }
+
+.ever-ui {
+	font-family: var(--ever-font-ui);
+	font-size: var(--ever-fs-md);
+	line-height: 1.4;
+	color: var(--ever-ink);
+	-webkit-font-smoothing: antialiased;
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* full-viewport 3D canvas under the UI */
+.ever-stage {
+	position: fixed;
+	inset: 0;
+	background: var(--ever-haze);
+	overflow: hidden;
+	touch-action: none;
+}
+.ever-stage > canvas { display: block; width: 100%; height: 100%; }
+
+/* UI layer above the canvas; children opt into pointer events */
+.ever-layer {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	padding: max(var(--ever-gutter), env(safe-area-inset-top)) max(var(--ever-gutter), env(safe-area-inset-right))
+		max(var(--ever-gutter), env(safe-area-inset-bottom)) max(var(--ever-gutter), env(safe-area-inset-left));
+}
+.ever-layer > * { pointer-events: auto; }
+
+.ever-display { font-family: var(--ever-font-display); font-weight: 400; letter-spacing: 0.01em; }
+.ever-title { font-family: var(--ever-font-display); font-size: var(--ever-fs-title); line-height: 1; letter-spacing: 0.04em; margin: 0; }
+.ever-muted { color: var(--ever-ink-soft); }
+.ever-smallcaps { font-size: var(--ever-fs-xs); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+
+.ever-ui :focus-visible {
+	outline: 3px solid var(--ever-dusk);
+	outline-offset: 2px;
+}
+
+/* ---------- panel ---------- */
+
+.ever-panel {
+	background: var(--ever-paper);
+	border: var(--ever-border);
+	border-radius: var(--ever-radius);
+	box-shadow: var(--ever-rule), var(--ever-shadow);
+	padding: 16px 18px;
+	color: var(--ever-ink);
+}
+.ever-panel--dark { background: var(--ever-ink); color: var(--ever-paper); box-shadow: var(--ever-shadow); }
+.ever-panel__title { font-family: var(--ever-font-display); font-size: var(--ever-fs-lg); margin: 0 0 8px; }
+.ever-panel__text { margin: 0 0 14px; }
+.ever-panel__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* centered modal panel (station panels, gate prompt, win/death) */
+.ever-modal {
+	position: fixed;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: var(--ever-gutter);
+	background: var(--ever-scrim);
+	pointer-events: auto;
+	animation: ever-fade var(--ever-t-med) var(--ever-ease);
+}
+.ever-modal > .ever-panel { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; }
+/* panels with a card picker get room for three or four readable cards per row */
+.ever-modal > .ever-panel:has(.ever-deck-grid--picker) { width: min(660px, 100%); }
+
+/* ---------- buttons ---------- */
+
+.ever-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: var(--ever-tap);
+	padding: 10px 18px;
+	font: 600 var(--ever-fs-md) / 1.1 var(--ever-font-ui);
+	color: var(--ever-ink);
+	background: var(--ever-paper);
+	border: var(--ever-border);
+	border-radius: var(--ever-radius-sm);
+	box-shadow: var(--ever-shadow);
+	cursor: pointer;
+	text-align: center;
+	transition: transform var(--ever-t-fast) var(--ever-ease), box-shadow var(--ever-t-fast) var(--ever-ease),
+		background var(--ever-t-fast);
+	user-select: none;
+}
+.ever-btn:hover { background: #FFF6E6; }
+.ever-btn:active { transform: translateY(2px); box-shadow: var(--ever-shadow-press); }
+.ever-btn:disabled,
+.ever-btn[aria-disabled='true'] {
+	cursor: not-allowed;
+	color: var(--ever-haze);
+	border-color: var(--ever-haze);
+	box-shadow: none;
+	transform: none;
+	background: var(--ever-paper);
+}
+
+/* primary: ink with an ember spine */
+.ever-btn--primary {
+	color: var(--ever-paper);
+	background: var(--ever-ink);
+	border-bottom: 4px solid var(--ever-ember);
+}
+.ever-btn--primary:hover { background: #3A3944; }
+
+/* quiet: text only */
+.ever-btn--quiet {
+	background: transparent;
+	border-color: transparent;
+	box-shadow: none;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	text-decoration-thickness: 2px;
+	text-decoration-color: transparent;
+}
+.ever-btn--quiet:hover { background: transparent; text-decoration-color: currentColor; }
+.ever-btn--quiet:active { transform: none; box-shadow: none; }
+
+/* tempting / dangerous choice (Shrine): secondary + doubt text */
+.ever-btn--doubt { color: var(--ever-doubt); border-color: var(--ever-doubt); }
+.ever-btn--block { width: 100%; justify-content: flex-start; text-align: left; }
+.ever-btn__key {
+	display: inline-grid;
+	place-items: center;
+	min-width: 22px;
+	height: 22px;
+	font-size: var(--ever-fs-xs);
+	font-weight: 800;
+	border: 2px solid currentColor;
+	border-radius: 5px;
+	opacity: 0.7;
+}
+
+/* ---------- inputs ---------- */
+
+.ever-input {
+	min-height: var(--ever-tap);
+	width: 100%;
+	padding: 10px 12px;
+	font: 400 var(--ever-fs-md) var(--ever-font-ui);
+	color: var(--ever-ink);
+	background: #FFFBF3;
+	border: var(--ever-border);
+	border-radius: var(--ever-radius-sm);
+}
+.ever-input::placeholder { color: var(--ever-haze); }
+.ever-input--code { font-family: var(--ever-font-display); font-size: var(--ever-fs-xl); letter-spacing: 0.3em; text-transform: uppercase; text-align: center; }
+.ever-label { display: block; margin: 0 0 6px; font-size: var(--ever-fs-sm); font-weight: 600; }
+.ever-error { color: var(--ever-ember); font-weight: 600; font-size: var(--ever-fs-sm); margin: 6px 0 0; }
+
+/* ---------- HUD ---------- */
+
+.ever-hud { position: absolute; top: max(var(--ever-gutter), env(safe-area-inset-top)); left: max(var(--ever-gutter), env(safe-area-inset-left)); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: calc(100% - 2 * var(--ever-gutter)); }
+
+.ever-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 34px;
+	padding: 5px 14px 5px 10px;
+	font: 800 var(--ever-fs-sm) / 1 var(--ever-font-ui);
+	color: var(--ever-ink);
+	background: var(--ever-paper);
+	border: var(--ever-border);
+	border-radius: var(--ever-radius-pill);
+	box-shadow: var(--ever-shadow);
+	white-space: nowrap;
+}
+button.ever-pill { cursor: pointer; }
+.ever-pill__dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ever-ink); border: 2px solid var(--ever-ink); flex: none; }
+.ever-pill--hp .ever-pill__dot { background: var(--ever-ember); }
+.ever-pill--block .ever-pill__dot { background: var(--ever-ward); }
+.ever-pill--energy .ever-pill__dot { background: var(--ever-gold); }
+.ever-pill--trust .ever-pill__dot { background: var(--ever-dusk); }
+.ever-pill--dark { background: var(--ever-ink); color: var(--ever-paper); }
+
+/* HP bar inside a pill (optional) */
+.ever-bar { position: relative; width: 72px; height: 8px; border: 2px solid var(--ever-ink); border-radius: 4px; background: var(--ever-paper-2); overflow: hidden; }
+.ever-bar > i { position: absolute; inset: 0 auto 0 0; width: var(--ever-fill, 100%); background: var(--ever-ember); transition: width var(--ever-t-med) var(--ever-ease); }
+
+/* token slots: three, empty = dashed haze */
+.ever-tokens { display: inline-flex; gap: 6px; align-items: center; }
+.ever-token {
+	width: 30px;
+	height: 30px;
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+	border: 2px dashed var(--ever-haze);
+	background: transparent;
+}
+.ever-token.is-full { border: 2px solid var(--ever-gold); background: var(--ever-paper); box-shadow: var(--ever-shadow-press); }
+.ever-token img { width: 24px; height: 24px; }
+.ever-token--ember.is-full { background: var(--ever-ember); }
+.ever-token--ward.is-full { background: var(--ever-ward); }
+.ever-token--whetstone.is-full { background: #8C93A0; }
+/* what a token does: hover, keyboard focus or tap shows a paper tip under the slot */
+.ever-token { position: relative; }
+.ever-token.is-full { cursor: help; }
+.ever-token.is-full[data-tip]:hover::after,
+.ever-token.is-full[data-tip]:focus-visible::after,
+.ever-token.is-full[data-tip].is-tip::after {
+	content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 0; z-index: 3;
+	padding: 4px 10px; white-space: nowrap; font-size: var(--ever-fs-sm); font-weight: 600; color: var(--ever-ink);
+	background: var(--ever-paper); border: var(--ever-border); border-radius: var(--ever-radius-sm); box-shadow: var(--ever-shadow);
+}
+
+/* hint strip, top center */
+.ever-hint {
+	position: absolute;
+	top: max(var(--ever-gutter), env(safe-area-inset-top));
+	left: 50%;
+	transform: translateX(-50%);
+	max-width: min(520px, calc(100% - 2 * var(--ever-gutter)));
+	padding: 6px 14px;
+	font-size: var(--ever-fs-sm);
+	font-style: italic;
+	background: var(--ever-paper);
+	border: var(--ever-border);
+	border-radius: var(--ever-radius-sm);
+	box-shadow: var(--ever-shadow);
+	text-align: center;
+}
+
+/* interact prompt: "E  Talk to Marcus" */
+.ever-prompt { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--ever-paper); color: var(--ever-ink); border: var(--ever-border); border-radius: var(--ever-radius-sm); box-shadow: var(--ever-rule), var(--ever-shadow); font-weight: 600; }
+.ever-prompt .ever-btn__key { border-color: var(--ever-ink); opacity: 1; }
+@media (pointer: coarse) { .ever-prompt .ever-btn__key { display: none; } }
+
+/* room chip + party list, top right */
+.ever-party { position: absolute; top: max(var(--ever-gutter), env(safe-area-inset-top)); right: max(var(--ever-gutter), env(safe-area-inset-right)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ever-chip { font-family: var(--ever-font-display); letter-spacing: 0.12em; }
+.ever-party__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.ever-party__row { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: var(--ever-fs-sm); background: var(--ever-paper); border: var(--ever-border); border-radius: var(--ever-radius-pill); }
+.ever-party__row.is-away { opacity: 0.55; border-style: dashed; }
+.ever-party__row.is-down { text-decoration: line-through; }
+.ever-seat { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ever-ink); background: var(--ever-seat-1); flex: none; }
+.ever-seat[data-seat='2'] { background: var(--ever-seat-2); }
+.ever-seat[data-seat='3'] { background: var(--ever-seat-3); }
+.ever-seat[data-seat='4'] { background: var(--ever-seat-4); }
+
+/* 3D-anchored name tag above a player */
+.ever-nametag { position: absolute; transform: translate(-50%, -100%); padding: 2px 8px; font-size: var(--ever-fs-xs); font-weight: 800; background: var(--ever-paper); border: 2px solid var(--ever-ink); border-radius: var(--ever-radius-pill); white-space: nowrap; pointer-events: none; }
+.ever-nametag::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; background: var(--seat, var(--ever-seat-1)); vertical-align: 0; }
+
+/* ---------- toast ---------- */
+
+.ever-toasts { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column-reverse; gap: 8px; align-items: center; pointer-events: none; z-index: 50; width: min(480px, calc(100% - 32px)); }
+.ever-toast { padding: 8px 16px; background: var(--ever-ink); color: var(--ever-paper); border-radius: var(--ever-radius-sm); box-shadow: var(--ever-shadow); font-weight: 600; font-size: var(--ever-fs-sm); animation: ever-toast-in var(--ever-t-med) var(--ever-ease); text-align: center; }
+.ever-toast--good { border-left: 6px solid var(--ever-moss); }
+.ever-toast--bad { border-left: 6px solid var(--ever-doubt); }
+.ever-toast--gold { border-left: 6px solid var(--ever-gold); }
+
+/* ---------- dialogue ---------- */
+
+.ever-dialogue {
+	position: fixed;
+	left: 50%;
+	bottom: max(var(--ever-gutter), env(safe-area-inset-bottom));
+	transform: translateX(-50%);
+	width: min(720px, calc(100% - 2 * var(--ever-gutter)));
+	margin-top: 18px;
+	padding-top: 22px;
+	animation: ever-rise var(--ever-t-med) var(--ever-ease);
+	overflow: visible;
+}
+.ever-dialogue__speaker {
+	position: absolute;
+	top: -16px;
+	left: 16px;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	padding: 5px 14px;
+	font-family: var(--ever-font-display);
+	font-size: var(--ever-fs-lg);
+	color: var(--ever-paper);
+	background: var(--ever-ink);
+	border-radius: var(--ever-radius-sm);
+	box-shadow: var(--ever-shadow);
+}
+.ever-dialogue__speaker .ever-pill { min-height: 24px; padding: 2px 10px 2px 6px; font-size: var(--ever-fs-xs); box-shadow: none; border-width: 1.5px; }
+.ever-dialogue__line { font-size: 17px; line-height: 1.5; margin: 0 0 14px; }
+.ever-dialogue__line em { font-style: italic; color: var(--ever-ink-soft); }
+.ever-dialogue__options { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; padding: 0; list-style: none; }
+.ever-dialogue__free { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+.ever-dialogue__free .ever-input { flex: 1; }
+.ever-dialogue__note { margin: 8px 0 0; font-size: var(--ever-fs-xs); color: var(--ever-ink-soft); }
+.ever-dialogue__scroll { max-height: calc(min(70vh, 560px) - 40px); overflow: auto; }
+.ever-thinking::after { content: '...'; display: inline-block; width: 1.2em; text-align: left; animation: ever-dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
+
+/* ---------- cards ---------- */
+
+.ever-card {
+	--type: var(--ever-card-attack);
+	--w: 150px;
+	position: relative;
+	width: var(--w);
+	aspect-ratio: 5 / 7;
+	display: flex;
+	flex-direction: column;
+	/* QA: card text was 7-9 px. The base never drops below 12 px (description >= 11 px). */
+	font-size: max(12px, calc(var(--w) * 0.083));
+	color: var(--ever-ink);
+	background: var(--ever-paper);
+	border: var(--ever-border);
+	border-radius: var(--ever-radius);
+	box-shadow: var(--ever-shadow);
+	overflow: hidden;
+	user-select: none;
+	transition: transform var(--ever-t-fast) var(--ever-ease), box-shadow var(--ever-t-fast) var(--ever-ease);
+}
+.ever-card[data-type='attack'] { --type: var(--ever-card-attack); }
+.ever-card[data-type='skill'] { --type: var(--ever-card-skill); }
+.ever-card[data-type='power'] { --type: var(--ever-card-power); }
+.ever-card[data-type='curse'] { --type: var(--ever-card-curse); }
+.ever-card[data-type='token'] { --type: var(--ever-card-token); }
+.ever-card[data-type='status'] { --type: var(--ever-card-status); }
+
+.ever-card__band {
+	height: 18%;
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-end;
+	padding: 0 0.6em 0.3em;
+	background: var(--type);
+	border-bottom: 2px solid var(--ever-ink);
+	color: var(--ever-paper);
+	font-size: max(9px, 0.72em);
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+.ever-card[data-type='token'] .ever-card__band { color: var(--ever-ink); }
+.ever-card__cost {
+	position: absolute;
+	top: 5%;
+	left: 6%;
+	width: 2.1em;
+	height: 2.1em;
+	display: grid;
+	place-items: center;
+	font-family: var(--ever-font-display);
+	font-size: 1.15em;
+	color: var(--ever-paper);
+	background: var(--ever-ink);
+	border: 2px solid var(--ever-paper);
+	border-radius: 50%;
+	box-shadow: 0 0 0 2px var(--ever-ink);
+}
+.ever-card__name {
+	margin: 0.55em 0.5em 0.3em;
+	font-family: var(--ever-font-display);
+	font-size: max(13px, 1.1em);
+	line-height: 1.1;
+	text-align: center;
+}
+.ever-card__art {
+	margin: 0 0.6em;
+	height: 34%;
+	flex: none;
+	min-height: 0;
+	/* flex, not grid: a % max-height on a grid item does not resolve, so tall icons spilled */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	/* a small window of Ashbrook sky; the type color lives only in the band */
+	background: color-mix(in srgb, var(--ever-ward) 45%, var(--ever-paper));
+	border: 1.5px solid rgba(43, 42, 51, 0.35);
+	border-radius: var(--ever-radius-sm);
+}
+.ever-card__art img { height: 90%; width: auto; max-width: 90%; object-fit: contain; image-rendering: auto; }
+.ever-card__text {
+	flex: 1;
+	display: grid;
+	place-items: center;
+	margin: 0;
+	padding: 0.3em 0.5em 0.5em;
+	font-size: max(11px, 0.92em);
+	line-height: 1.22;
+	overflow: hidden;
+	text-align: center;
+}
+
+/* states */
+.ever-card.is-upgraded { border-color: var(--ever-gold); box-shadow: 0 0 0 1px var(--ever-gold), inset 0 0 0 1px var(--ever-gold), var(--ever-shadow); }
+.ever-card.is-upgraded .ever-card__name::after { content: '+'; color: var(--ever-gold); margin-left: 1px; }
+.ever-card.is-unplayable { filter: saturate(0.55); }
+.ever-card.is-unplayable .ever-card__cost { font-size: 0; }
+.ever-card.is-unplayable .ever-card__cost::after { content: '\2013'; font-size: 18px; }
+.ever-card[data-type='curse'] .ever-card__art {
+	background:
+		repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in srgb, var(--ever-doubt) 22%, transparent) 7px 9px),
+		color-mix(in srgb, var(--ever-doubt) 12%, var(--ever-paper));
+}
+.ever-card.is-playable { cursor: grab; }
+.ever-card.is-playable:hover,
+.ever-card.is-selected { transform: translateY(-12px) scale(1.06); box-shadow: var(--ever-shadow-lg); z-index: 2; }
+.ever-card.is-denied { animation: ever-shake 160ms linear; }
+.ever-card--sm { --w: 150px; }
+.ever-card--lg { --w: 200px; }
+
+/* hand of cards, bottom of the combat screen (bottom 40%) */
+.ever-hand { position: fixed; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: center; align-items: flex-end; padding: 0 var(--ever-gutter); pointer-events: none; }
+.ever-hand > .ever-card { pointer-events: auto; margin: 0 -3px; }
+
+/* deck grid (Tab screen, pickers) */
+.ever-deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; justify-items: center; }
+.ever-deck-grid .ever-card { --w: 140px; }
+/* pickers sit in a scroll box: leave room for the hover lift so the top card is not clipped */
+.ever-deck-grid--picker { padding: 14px 4px 6px; }
+.ever-deck-grid--picker .ever-card.is-playable:hover,
+.ever-deck-grid--picker .ever-card.is-selected { transform: translateY(-6px) scale(1.03); }
+/* the margin stone offers three cards: show them big (QA: ~150 x 210) */
+.ever-deck-grid--offer { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); padding-top: 18px; }
+.ever-deck-grid--offer .ever-card { --w: 150px; }
+.ever-count { position: absolute; right: -6px; top: -6px; z-index: 3; min-width: 26px; height: 26px; padding: 0 6px; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: var(--ever-paper); background: var(--ever-ink); border-radius: var(--ever-radius-pill); }
+
+/* ---------- combat bits ---------- */
+
+.ever-energy {
+	width: 64px;
+	height: 64px;
+	display: grid;
+	place-items: center;
+	font-family: var(--ever-font-display);
+	font-size: 24px;
+	color: var(--ever-ink);
+	background: var(--ever-gold);
+	border: var(--ever-border);
+	border-radius: 50%;
+	box-shadow: var(--ever-shadow);
+}
+.ever-intent { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; font-weight: 800; font-size: var(--ever-fs-sm); color: var(--ever-paper); background: var(--ever-ink); border-radius: var(--ever-radius-pill); border: 2px solid var(--ever-ember); box-shadow: var(--ever-shadow); }
+.ever-intent--block { border-color: var(--ever-slate); }
+.ever-intent--debuff { border-color: var(--ever-doubt); }
+.ever-banner { display: inline-block; padding: 8px 28px; font-family: var(--ever-font-display); font-size: var(--ever-fs-xl); background: var(--ever-paper); border: var(--ever-border); border-radius: var(--ever-radius); box-shadow: var(--ever-shadow-lg); animation: ever-rise var(--ever-t-med) var(--ever-ease); }
+.ever-float { position: absolute; font-family: var(--ever-font-display); font-size: var(--ever-fs-xl); text-shadow: 0 3px 0 var(--ever-ink-a85); pointer-events: none; animation: ever-float 700ms var(--ever-ease) forwards; transform: translate(-50%, 0); }
+.ever-float--damage { color: var(--ever-ember); }
+.ever-float--block { color: var(--ever-ward); }
+.ever-float--heal { color: var(--ever-moss); }
+.ever-float--doubt { color: var(--ever-doubt); }
+.ever-status { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; font-size: var(--ever-fs-xs); font-weight: 800; border-radius: var(--ever-radius-pill); border: 2px solid var(--ever-ink); background: var(--ever-paper); }
+.ever-status--vulnerable { background: var(--ever-ember); color: var(--ever-paper); }
+.ever-status--weak { background: var(--ever-doubt); color: var(--ever-paper); }
+.ever-status--block { background: var(--ever-ward); }
+.ever-pile { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; font-size: var(--ever-fs-xs); font-weight: 800; }
+
+/* ---------- book screens (cover, chapter page, win, death) ---------- */
+
+.ever-page {
+	width: min(560px, 100%);
+	padding: 40px 36px;
+	text-align: center;
+	background: var(--ever-paper);
+	border: var(--ever-border);
+	border-radius: 4px var(--ever-radius) var(--ever-radius) 4px;
+	box-shadow: var(--ever-rule), 4px 4px 0 var(--ever-paper-2), 4px 4px 0 2px var(--ever-ink), 8px 8px 0 var(--ever-paper-2), 8px 8px 0 2px var(--ever-ink);
+}
+.ever-page h1, .ever-page h2 { font-family: var(--ever-font-display); font-weight: 400; margin: 0 0 10px; }
+.ever-page h2 { font-size: var(--ever-fs-xl); }
+.ever-page__quote { font-family: var(--ever-font-display); font-style: italic; color: var(--ever-ink-soft); margin: 14px 0; }
+.ever-page__stat { font-size: var(--ever-fs-sm); color: var(--ever-ink-soft); margin: 12px 0 20px; }
+.ever-page .ever-panel__actions { justify-content: center; }
+.ever-footer { font-size: var(--ever-fs-xs); color: var(--ever-paper); text-shadow: 0 1px 0 var(--ever-ink); }
+.ever-footer a { color: inherit; }
+
+/* ---------- animations ---------- */
+
+@keyframes ever-fade { from { opacity: 0; } }
+@keyframes ever-rise { from { opacity: 0; transform: translate(var(--tx, 0), 8px); } }
+.ever-dialogue { --tx: -50%; }
+@keyframes ever-toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes ever-float { to { opacity: 0; transform: translate(-50%, -24px); } }
+@keyframes ever-shake { 25% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 75% { transform: translateX(-3px); } }
+@keyframes ever-dots { from { width: 0; } to { width: 1.2em; } }
+
+/* ---------- phone ---------- */
+
+/* mid widths: the centred hint would run into the HUD pills, so it drops under them */
+@media (min-width: 641px) and (max-width: 1240px) {
+	.ever-hint { top: calc(max(var(--ever-gutter), env(safe-area-inset-top)) + 46px); }
+}
+
+@media (max-width: 640px) {
+	:root { --ever-fs-md: 15px; --ever-fs-xl: 24px; }
+	.ever-card { --w: 96px; }
+	.ever-card--lg { --w: 150px; }
+	.ever-hand > .ever-card { margin: 0 -18px; }
+	.ever-energy { width: 52px; height: 52px; font-size: 20px; }
+	.ever-dialogue { max-height: 62vh; }
+	.ever-dialogue__free { flex-direction: column; }
+	.ever-page { padding: 28px 20px; }
+	/* phones: hint above, interaction prompt below it (prompt 44 px tall + 12 px gap) */
+	.ever-hint { top: auto; bottom: calc(max(var(--ever-gutter), env(safe-area-inset-bottom)) + 8px + var(--ever-tap) + 12px); }
+	.ever-party__row { font-size: var(--ever-fs-xs); }
+	/* the hint moves to the bottom on phones; hide it while a dialogue or modal is open */
+	body:has(.ever-dialogue, .ever-modal) .ever-hint { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ever-ui *,
+	.ever-modal,
+	.ever-dialogue,
+	.ever-toast,
+	.ever-banner,
+	.ever-card { animation-duration: 80ms !important; transition-duration: 80ms !important; }
+	.ever-card.is-playable:hover,
+	.ever-card.is-selected { transform: translateY(-6px); }
+	.ever-card.is-denied { animation: none; }
+}

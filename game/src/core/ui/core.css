@@ -1,0 +1,86 @@
+/*
+ * EVER core UI layout (cover, pages, HUD placement, transitions). Uses only the tokens and
+ * components from shared/style.css; adds layout, no new colors. OWNER: systems engineer.
+ * Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/* slots inside #ui: full-viewport, click-through, children opt in */
+.ever-slot { position: fixed; inset: 0; pointer-events: none; }
+.ever-slot > * { pointer-events: auto; }
+#ui > .ever-slot { pointer-events: none; }
+#ui > .ever-slot > * { pointer-events: auto; }
+#ui { padding: 0; }
+#ui > .ever-slot--screen { z-index: 20; }
+#ui > .ever-slot--hud { z-index: 10; }
+#ui > .ever-slot--panel { z-index: 30; }
+
+.ever-hudroot { position: fixed; inset: 0; pointer-events: none; }
+.ever-hudroot > * { pointer-events: auto; }
+.ever-hudroot .ever-hud,
+.ever-hudroot .ever-hint,
+.ever-hudroot .ever-party { z-index: 1; }
+.ever-hudroot .ever-hud { z-index: 2; } /* token tips draw over the hint strip */
+.ever-prompt-wrap { position: absolute; left: 50%; bottom: calc(max(var(--ever-gutter), env(safe-area-inset-bottom)) + 8px); transform: translateX(-50%); display: flex; pointer-events: none; }
+.ever-prompt-wrap > * { pointer-events: auto; }
+.ever-prompt { border: 0; font-family: inherit; font-size: var(--ever-fs-md); cursor: pointer; min-height: var(--ever-tap); }
+.ever-party__leave { padding: 2px 6px; min-height: 28px; font-size: var(--ever-fs-xs); color: var(--ever-paper); text-shadow: 0 1px 0 var(--ever-ink); }
+
+/* full-screen pages */
+.ever-screen { position: fixed; inset: 0; display: grid; place-items: center; padding: var(--ever-gutter); overflow: auto; animation: ever-fade var(--ever-t-med) var(--ever-ease); background: color-mix(in srgb, var(--ever-ink) 35%, transparent); }
+.ever-screen--cover { background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--ever-ink) 30%, transparent)); }
+/* tall screens: the title page sits low so the 3D book shows above it */
+@media (max-aspect-ratio: 9/10) {
+	.ever-screen--cover { align-items: end; padding-bottom: max(4vh, 16px); }
+}
+/* wide screens: the title page stands right of the 3D book (world/index.js frameCover) */
+@media (min-aspect-ratio: 23/20) and (min-width: 900px) {
+	.ever-screen--cover { justify-items: end; padding-right: max(6vw, 24px); }
+}
+.ever-screen > .ever-page { position: relative; }
+
+.ever-cover { padding-top: 34px; }
+.ever-cover__book { font-size: var(--ever-fs-lg); margin: 8px 0 0; color: var(--ever-ink-soft); }
+.ever-cover__buttons { display: grid; gap: 12px; margin: 22px auto 6px; width: min(300px, 100%); }
+.ever-cover__foot { margin: 18px 0 0; line-height: 1.5; }
+.ever-cover__foot a { color: var(--ever-ink); }
+.ever-cover__foot .ever-btn { min-height: 28px; padding: 0 4px; font-size: var(--ever-fs-xs); }
+
+.ever-chapter { cursor: pointer; font: inherit; color: inherit; display: block; margin: 0 auto; transition: transform 380ms var(--ever-ease), opacity 380ms var(--ever-ease); transform-origin: left center; }
+.ever-chapter.is-turning { transform: perspective(900px) rotateY(-70deg); opacity: 0; }
+.ever-chapter__name { font-size: var(--ever-fs-xl); margin: 4px 0 14px; }
+.ever-chapter__line { margin: 0 auto; max-width: 30ch; }
+
+.ever-form { text-align: left; }
+.ever-form h2 { text-align: center; }
+.ever-code { font-family: var(--ever-font-ui); font-weight: 800; font-size: clamp(40px, 12vw, 60px); letter-spacing: 0.3em; font-variant-numeric: lining-nums tabular-nums; margin: 8px 0; text-align: center; padding-left: 0.3em; user-select: all; }
+.ever-page--dead { border-bottom-color: var(--ever-doubt); }
+
+/* scene fade between world and combat */
+.ever-fadeout { position: fixed; inset: 0; z-index: 40; background: var(--ever-ink); opacity: 0; pointer-events: none; transition: opacity 200ms var(--ever-ease); }
+.ever-fadeout.is-on { opacity: 1; pointer-events: auto; }
+
+@media (max-width: 640px) {
+	.ever-cover { padding-top: 24px; }
+	/* keep "Leave room" reachable on phones (it was hidden, so a phone could not leave a room) */
+	.ever-party__leave { min-height: 32px; }
+	/* the HUD pills fill the top row on phones: put the party roster under them, not on top */
+	.ever-hudroot .ever-party { top: calc(max(var(--ever-gutter), env(safe-area-inset-top)) + 80px); }
+	.ever-prompt-wrap { bottom: calc(max(var(--ever-gutter), env(safe-area-inset-bottom)) + 8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.ever-fadeout { transition-duration: 60ms; }
+	.ever-chapter { transition-duration: 60ms; }
+}
+
+/* count chip sits bottom-right of a card (the top-right holds the type band) */
+/* room codes elsewhere (HUD chip, join input): lining digits, so a 2 is never a small x-height glyph */
+/* (Young Serif draws old-style figures, so codes use the UI face, which has lining ones) */
+.ever-chip, .ever-input--code { font-family: var(--ever-font-ui); font-weight: 800; font-variant-numeric: lining-nums tabular-nums; }
+.ever-card > .ever-count { top: 21%; bottom: auto; right: 8px; min-width: 22px; height: 22px; font-size: 11px; }
+/* toasts must not hide behind a panel or the dialogue */
+body:has(.ever-dialogue, .ever-modal) .ever-toasts { bottom: auto; top: 64px; flex-direction: column; }
+
+/* HUD curse counter (QA: the shipped HUD had no curse indicator) */
+.ever-pill--doubt { color: var(--ever-doubt); }
+.ever-pill--doubt .ever-pill__dot { background: var(--ever-doubt); border-color: var(--ever-doubt); }
+.ever-pill[hidden] { display: none; }

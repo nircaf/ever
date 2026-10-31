@@ -1,0 +1,22 @@
+EVER (Evolving Virtual Experiences & Reincarnation)
+Copyright (C) 2026 the EVER contributors.
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later version.
+It is distributed WITHOUT ANY WARRANTY. Full text: LICENSE in the source tree.
+
+Card combat is built on Slay the Web
+  https://github.com/oskarrough/slaytheweb (commit a108c3e)
+  Copyright (C) Oskar Rough and contributors. AGPL-3.0-or-later.
+  Vendored unchanged under vendor/slaytheweb/ (see NOTICE.md there).
+  Slay the Web is itself inspired by Slay the Spire by MegaCrit.
+
+3D rendering: three.js (MIT), https://threejs.org
+Immutable state: Immer (MIT), https://immerjs.github.io/immer/
+Fonts: Young Serif and Figtree (SIL Open Font License), via Google Fonts.
+
+All models are built procedurally from three.js geometry. No downloaded art.
+
+Source code: ask the site operator or see the project repository (AGPL section 13:
+users interacting with this game over a network may receive its source).

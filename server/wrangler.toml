@@ -1,0 +1,33 @@
+# EVER room server: one Worker, one Durable Object (Room) per room code.
+# OWNER: network engineer. Docs: docs/TECH.md section 6.
+# Local:  npm run rooms   (wrangler dev on http://127.0.0.1:8787, no Cloudflare login needed)
+# Deploy (NOT done by the studio pipeline yet): npx wrangler deploy --config server/wrangler.toml
+name = "ever-rooms"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = false
+
+[dev]
+ip = "127.0.0.1"
+port = 8787
+local_protocol = "http"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[vars]
+PROTOCOL_VERSION = "1"
+# Origins allowed to open sockets / create rooms (comma list). Local dev origins
+# (localhost, 127.0.0.1, any port) are always allowed by the code.
+ALLOWED_ORIGINS = "https://game.dreamz.rest"
+
+# Production routing: the Worker answers /room/* on the Pages custom domain, so the
+# browser talks same-origin (wss://game.dreamz.rest/room/<CODE>). Uncomment on deploy.
+# routes = [
+#   { pattern = "game.dreamz.rest/room/*", zone_name = "dreamz.rest" }
+# ]

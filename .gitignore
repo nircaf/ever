@@ -1,0 +1,12 @@
+node_modules
+.DS_Store
+cache
+logs
+# build output (npm run build); Cloudflare Pages builds it itself
+public/
+# wrangler dev state
+.wrangler/
+server/.wrangler/
+
+# local tool state
+.a5c/

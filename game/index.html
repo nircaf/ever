@@ -1,0 +1,41 @@
+<!doctype html>
+<!--
+  EVER (Evolving Virtual Experiences & Reincarnation)
+  Copyright (C) 2026 the EVER contributors. Card combat built on Slay the Web
+  (https://github.com/oskarrough/slaytheweb) by Oskar Rough and contributors.
+  SPDX-License-Identifier: AGPL-3.0-or-later. Source and license: see ./CREDITS.txt.
+  OWNER: systems engineer.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>EVER</title>
+		<meta name="description" content="A low-poly village, one grieving blacksmith, and a card fight at the Ash Gate. Solo or with up to 3 friends." />
+		<meta name="theme-color" content="#2B2A33" />
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<!-- Fonts: main.js adds the Google Fonts stylesheet after first paint (no inline
+		     handlers, CSP-safe). Offline the Georgia / system-ui fallbacks take over. -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<style>
+			html, body { margin: 0; height: 100%; background: #8E9DB3; overflow: hidden; }
+			[hidden] { display: none !important; }
+			/* first paint, before the scripts run (main.js removes it once the cover is up) */
+			.ever-boot { position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; transition: opacity 300ms; }
+			.ever-boot p { margin: 0; padding: 10px 22px; font: italic 16px Georgia, 'Times New Roman', serif; color: #2B2A33; background: #F2E8D5; border: 2px solid #2B2A33; border-radius: 10px; box-shadow: 0 3px 0 rgba(43, 42, 51, 0.85); }
+			.ever-boot.is-gone { opacity: 0; pointer-events: none; }
+		</style>
+	</head>
+	<body class="ever-ui">
+		<!-- One WebGL canvas for both modes (combat re-frames the same scene). -->
+		<div id="world" class="ever-stage" aria-hidden="true"></div>
+		<!-- Combat DOM layer: hand, energy, intents. Owned by combat engineer. -->
+		<div id="combat" class="ever-layer" hidden></div>
+		<!-- Everything else: book pages, HUD, dialogue, toasts, multiplayer screens. -->
+		<div id="ui" class="ever-layer"></div>
+		<div id="ever-boot" class="ever-boot" role="status"><p>Opening the book...</p></div>
+		<noscript>EVER needs JavaScript and WebGL.</noscript>
+		<script type="module" src="./src/main.js"></script>
+	</body>
+</html>

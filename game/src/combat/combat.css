@@ -1,0 +1,169 @@
+/*
+ * EVER combat screen layout. Components (cards, pills, intents, floats, banner) come
+ * from shared/style.css; this file only places them and adds the combat motion.
+ * OWNER: combat engineer. Copyright (C) 2026 the EVER contributors.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#combat.cbt-layer { padding: 0; z-index: 5; }
+
+/* our fallback 3D diorama (only when the world gives us no actors) */
+.cbt-stage { position: fixed; inset: 0; pointer-events: none !important; background: var(--ever-haze); }
+.cbt-stage > canvas { display: block; width: 100%; height: 100%; }
+
+.cbt {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	padding: max(var(--ever-gutter), env(safe-area-inset-top)) max(var(--ever-gutter), env(safe-area-inset-right))
+		max(10px, env(safe-area-inset-bottom)) max(var(--ever-gutter), env(safe-area-inset-left));
+}
+.cbt button, .cbt a, .cbt .cbt-foe, .cbt .cbt-plate { pointer-events: auto; }
+
+/* ---------- top: Warden (left) and party (right) ---------- */
+.cbt-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.cbt-foe { position: relative; width: min(340px, 46vw); padding: 12px 14px; }
+.cbt-foe__name { margin: 0 0 6px; font-family: var(--ever-font-display); font-weight: 400; font-size: var(--ever-fs-lg); }
+.cbt-hprow { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: var(--ever-fs-sm); }
+.cbt-bar { flex: 1; width: auto; height: 12px; }
+.cbt-hp { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cbt-status { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; min-height: 0; }
+.cbt-status:empty { display: none; }
+.cbt-intents { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cbt-intent { position: relative; cursor: default; }
+.cbt-intent.is-skipped { opacity: 0.5; text-decoration: line-through; }
+.cbt-intent__tip {
+	position: absolute; left: 0; top: calc(100% + 6px); z-index: 4;
+	padding: 4px 10px; font-weight: 600; white-space: nowrap;
+	color: var(--ever-ink); background: var(--ever-paper); border: var(--ever-border); border-radius: var(--ever-radius-sm);
+	box-shadow: var(--ever-shadow); opacity: 0; transform: translateY(-4px); pointer-events: none;
+	transition: opacity var(--ever-t-fast) var(--ever-ease), transform var(--ever-t-fast) var(--ever-ease);
+}
+.cbt-intent:hover .cbt-intent__tip, .cbt-intent:focus-within .cbt-intent__tip { opacity: 1; transform: none; }
+.cbt-intent[data-step='4'] { border-width: 3px; }
+.cbt-intent__icons { display: inline-flex; gap: 2px; margin-left: -4px; }
+.cbt-icon { width: 1.35em; height: 1.35em; flex: none; }
+.cbt-intent[data-step='4'] .cbt-icon { animation: cbt-throb 1.2s var(--ever-ease) infinite alternate; }
+@keyframes cbt-throb { to { transform: translateY(-2px) scale(1.12); } }
+
+.cbt-party { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; width: min(260px, 40vw); }
+.cbt-plate { position: relative; width: 100%; padding: 8px 12px 10px; }
+.cbt-plate__head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-weight: 800; font-size: var(--ever-fs-sm); }
+.cbt-plate__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbt-plate__state { margin-left: auto; font-size: var(--ever-fs-xs); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ever-ink-soft); }
+.cbt-plate .ever-bar > i { background: var(--ever-moss); }
+.cbt-plate.is-you { box-shadow: var(--ever-rule), 0 3px 0 var(--ever-ink-a85), 0 0 0 3px var(--ever-dusk); }
+.cbt-plate.is-ended { opacity: 0.85; }
+.cbt-plate.is-away { opacity: 0.55; border-style: dashed; }
+.cbt-plate.is-down { opacity: 0.6; filter: saturate(0.3); }
+.cbt-plate.is-down .cbt-plate__name { text-decoration: line-through; }
+
+.is-hit { animation: cbt-hit 260ms var(--ever-ease); }
+@keyframes cbt-hit { 20% { transform: translateX(-5px); } 45% { transform: translateX(4px); } 70% { transform: translateX(-2px); } }
+
+.cbt-float { top: calc(100% + 6px); z-index: 6; }
+/* anchored above the Warden's head in the 3D view (index.js float) */
+.cbt-float--world { position: fixed; z-index: 6; }
+
+/* ---------- middle: banner + log ---------- */
+.cbt-banner { position: fixed; left: 0; right: 0; top: 34%; display: flex; justify-content: center; pointer-events: none; }
+.cbt-banner .ever-banner { --tx: 0; max-width: calc(100% - 32px); text-align: center; }
+.cbt-log { position: fixed; left: 50%; top: max(var(--ever-gutter), env(safe-area-inset-top)); transform: translateX(-50%); width: min(420px, 30vw); margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.cbt-log__line { padding: 4px 12px; font-size: var(--ever-fs-sm); font-weight: 600; color: var(--ever-paper); background: var(--ever-ink); border-radius: var(--ever-radius-sm); box-shadow: var(--ever-shadow); text-align: center; animation: ever-toast-in var(--ever-t-med) var(--ever-ease); transition: opacity 600ms var(--ever-ease); }
+.cbt-log__line--gold { border-left: 6px solid var(--ever-gold); }
+.cbt-log__line--doubt { border-left: 6px solid var(--ever-doubt); }
+.cbt-log__line.is-gone { opacity: 0; }
+
+/* ---------- bottom: energy + draw | hand | end turn + discard ---------- */
+.cbt-bottom {
+	position: fixed; left: 0; right: 0; bottom: max(26px, calc(env(safe-area-inset-bottom) + 18px));
+	display: grid; grid-template-columns: 120px 1fr 170px; align-items: end; gap: 12px;
+	padding: 0 max(var(--ever-gutter), env(safe-area-inset-right)) 0 max(var(--ever-gutter), env(safe-area-inset-left));
+	pointer-events: none;
+}
+.cbt-side { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cbt-side--right { align-items: flex-end; }
+.cbt-endwrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.cbt-end { pointer-events: auto; min-width: 150px; justify-content: center; white-space: normal; text-align: center; }
+.cbt-timer { font-family: var(--ever-font-display); font-size: var(--ever-fs-lg); color: var(--ever-paper); text-shadow: 0 2px 0 var(--ever-ink); min-height: 1em; }
+.cbt-timer.is-urgent { color: var(--ever-dusk); }
+.cbt-energy.is-empty { background: var(--ever-paper-2); }
+.cbt-pile { white-space: nowrap; padding: 4px 10px; background: var(--ever-paper); border: var(--ever-border); border-radius: var(--ever-radius-sm); box-shadow: var(--ever-shadow); }
+.cbt-pile__n { display: none; }
+
+.cbt-hand { display: flex; justify-content: center; align-items: flex-end; flex-wrap: nowrap; min-height: 40px; pointer-events: none; }
+/* cards shrink to fit the row (--n = hand size, set by index.js) before they overlap */
+.cbt-hand > .ever-card { --w: clamp(104px, calc((100vw - 380px) / var(--n, 5) - 6px), 150px); margin: 0 3px; pointer-events: auto; }
+.cbt-hand[data-count='8'] > .ever-card, .cbt-hand[data-count='9'] > .ever-card { margin: 0 -8px; }
+.cbt-is-locked, .cbt.is-locked .cbt-hand > .ever-card { cursor: default; }
+
+/* cards are buttons here: reset the UA button look, keep style.css's card look */
+button.cbt-card { font: inherit; font-size: max(12px, calc(var(--w) * 0.083)); padding: 0; margin: 0; text-align: inherit; cursor: default; appearance: none; -webkit-appearance: none; }
+button.cbt-card.is-playable { cursor: pointer; }
+button.cbt-card:not(.is-playable) { filter: saturate(0.7) brightness(0.96); }
+button.cbt-card.is-unplayable { filter: saturate(0.55); }
+/* (the art window itself is fitted in shared/style.css) */
+.cbt-card.is-long .ever-card__text { font-size: max(10.5px, 0.8em); line-height: 1.18; }
+/* style.css zeroes the cost font for unplayable cards, which collapses the em-sized circle */
+.ever-card.cbt-card.is-unplayable .ever-card__cost { font-size: 1.15em; }
+.ever-card.cbt-card.is-unplayable .ever-card__cost::after { font-size: 1em; }
+.cbt-card__key { position: absolute; right: 6%; bottom: 3%; font-size: 0.7em; font-weight: 800; color: var(--ever-ink-soft); }
+/* keyboard hints mean nothing on touch screens */
+@media (pointer: coarse) { .cbt-card__key, .cbt-keyhint { display: none; } }
+
+/* hovered / focused card, shown large above the hand */
+.cbt-preview { position: fixed; z-index: 8; transform: translate(-50%, 8px); opacity: 0; pointer-events: none !important; transition: opacity var(--ever-t-fast) var(--ever-ease), transform var(--ever-t-fast) var(--ever-ease); }
+.cbt-preview.is-on { opacity: 1; transform: translate(-50%, 0); }
+.cbt-preview > .ever-card { --w: 230px; box-shadow: var(--ever-shadow-lg); }
+.cbt-preview .cbt-card__key { display: none; }
+@media (max-height: 820px) { .cbt-preview > .ever-card { --w: 200px; } }
+@media (max-height: 640px) { .cbt-preview > .ever-card { --w: 170px; } }
+.cbt-deal { animation: cbt-deal var(--deal, 180ms) var(--ever-ease) backwards; }
+@keyframes cbt-deal { from { opacity: 0; transform: translate(-30vw, 40px) rotate(-12deg) scale(0.7); } }
+.cbt-ghost { position: fixed; z-index: 7; margin: 0 !important; pointer-events: none !important; }
+
+/* ---------- credit line ---------- */
+.cbt-credit { position: fixed; left: 50%; bottom: max(4px, env(safe-area-inset-bottom)); transform: translateX(-50%); margin: 0; font-size: var(--ever-fs-xs); color: var(--ever-paper); text-shadow: 0 1px 0 var(--ever-ink); white-space: nowrap; pointer-events: auto; }
+.cbt-credit a { color: inherit; }
+
+/* ---------- phone: compact top, controls row, hand wraps into two rows (GDD checklist) ---------- */
+@media (max-width: 640px) {
+	.cbt-top { gap: 8px; }
+	.cbt-foe { width: 56%; padding: 8px 10px; }
+	.cbt-foe__name { font-size: var(--ever-fs-md); margin-bottom: 4px; }
+	.cbt-intents { margin-top: 6px; gap: 4px; }
+	.cbt-intent { font-size: var(--ever-fs-xs); padding: 3px 8px; }
+	.cbt-party { width: 42%; gap: 4px; }
+	.cbt-plate { padding: 5px 8px 6px; }
+	.cbt-plate__head { font-size: var(--ever-fs-xs); }
+	.cbt-hprow { font-size: var(--ever-fs-xs); }
+	.cbt-log { top: auto; bottom: 48%; width: calc(100% - 32px); }
+	.cbt-banner { top: 30%; }
+	.cbt-bottom { grid-template-columns: 1fr 1fr; grid-template-areas: 'left right' 'hand hand'; row-gap: 8px; bottom: max(22px, calc(env(safe-area-inset-bottom) + 16px)); }
+	.cbt-side--left { grid-area: left; flex-direction: row; justify-content: flex-start; }
+	.cbt-side--right { grid-area: right; flex-direction: row-reverse; justify-content: flex-start; align-items: center; }
+	.cbt-endwrap { flex-direction: row-reverse; align-items: center; }
+	.cbt-end { min-width: 0; min-height: var(--ever-tap); }
+	.cbt-hand { grid-area: hand; flex-wrap: wrap; gap: 6px; }
+	.cbt-hand > .ever-card, .cbt-hand[data-count] > .ever-card { --w: 100px; margin: 0; }
+	.cbt-card__key { display: none; }
+	/* phone cards are 100 px wide: a slightly lower floor, still >= 10 px text */
+	button.cbt-card { font-size: max(10.5px, calc(var(--w) * 0.083)); }
+	.cbt-card .ever-card__name { font-size: max(12px, 1.05em); }
+	.cbt-card .ever-card__band { font-size: 9px; letter-spacing: 0.06em; }
+	.cbt-card .ever-card__text { font-size: max(10px, 0.9em); padding: 0.2em 0.35em 0.4em; }
+	.cbt-card.is-long .ever-card__text { font-size: 10px; line-height: 1.12; }
+	.cbt-preview { display: none; }
+}
+@media (max-width: 360px) {
+	.cbt-hand > .ever-card, .cbt-hand[data-count] > .ever-card { --w: 88px; }
+}
+@media (max-height: 560px) and (min-width: 641px) {
+	.cbt-hand > .ever-card { --w: 118px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.is-hit { animation: none; }
+	.cbt-intent[data-step='4'] .cbt-icon { animation: none; }
+	.cbt-deal { animation: ever-fade 80ms linear backwards; }
+}

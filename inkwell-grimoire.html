@@ -1,0 +1,597 @@
+<meta charset="utf-8">
+<title>Inkwell Grimoire</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=IM+Fell+English+SC&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a dark desk with a status strip, and the book page (Pixi canvas) with parchment note panels laid over it. */
+:root{
+  --desk:#0f1219;--panel:#1a1e2b;--line:#313852;--fg:#e8e9f2;--mute:#9aa0b8;--soul:#8fd3ff;--ember:#ffb15c;--rose:#e0707f;
+  --paper:#dfe2d3;--note:#e9ebdd;--ink:#1e2230;
+  --hand:'Caveat','Segoe Print',cursive;--serif:'IM Fell English SC',Georgia,serif;--ui:'Figtree',system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:radial-gradient(1200px 600px at 50% -10%,#1b2236,var(--desk));color:var(--fg);font:15px/1.45 var(--ui);margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 28px;min-height:100vh}
+.app{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+h1{font:400 26px var(--serif);margin:0;letter-spacing:.04em}
+h1 span{color:var(--soul)}
+.st{display:flex;flex-wrap:wrap;gap:6px}
+.st span{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 10px;font:600 13px var(--ui);white-space:nowrap}
+.st .hp{color:#ff9aa6}.st .gd{color:var(--ember)}
+.tb{display:flex;gap:6px}
+.tb button{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font:600 13px var(--ui);cursor:pointer}
+.tb button:hover{border-color:var(--soul)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.stage{position:relative;border-radius:10px;overflow:hidden;background:var(--paper);box-shadow:0 0 0 5px #272d44,0 0 0 6px #3d4668,0 30px 70px -20px #000}
+#view canvas{display:block;width:100%;height:auto;touch-action:none}
+.toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--ink);color:#f2efe0;font:600 20px var(--hand);padding:5px 18px;border-radius:255px 15px 225px 15px/15px 225px 15px 255px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:88%;text-align:center;z-index:4}
+.toast.on{opacity:1}
+.panel{position:absolute;inset:0;margin:auto;height:fit-content;max-height:94%;overflow:auto;width:min(560px,92%);background:var(--note);color:var(--ink);
+  border:2.5px solid var(--ink);border-radius:255px 18px 225px 18px/18px 225px 18px 255px;padding:20px 26px 22px;box-shadow:6px 8px 0 rgba(30,34,48,.35);z-index:3;font:500 21px/1.25 var(--hand)}
+.panel.wide{width:min(760px,95%)}
+.panel h2{font:400 26px var(--serif);margin:0 0 6px;letter-spacing:.03em}
+.panel .sub{font:600 12px var(--ui);letter-spacing:.14em;text-transform:uppercase;color:#5b6180}
+.panel p{margin:6px 0}.panel .line{font-size:23px;margin:8px 0 12px}
+.panel .tiny{font:400 12px var(--ui);color:#5b6180}
+.opts{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.opts button,.cardbtn{background:#f6f6ec;color:var(--ink);border:2px solid var(--ink);border-radius:225px 12px 255px 12px/12px 255px 12px 225px;padding:6px 16px;font:600 20px var(--hand);text-align:left;cursor:pointer}
+.opts button:hover:not(:disabled),.cardbtn:hover{background:#cfe6e2}
+.opts button:disabled{opacity:.45;cursor:not-allowed}
+.opts button.alt{border-style:dashed}.opts button.ghostbtn{border-color:#8087a3;color:#4a5070}
+.opts.row{flex-direction:row;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0}
+.cardbtn{display:flex;flex-direction:column;gap:2px;min-height:118px}
+.cardbtn b{font-size:21px}.cardbtn em{font-style:normal;font-size:17px;color:#4a5070}
+.cardbtn .c{align-self:flex-end;background:var(--ink);color:#fff;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;font-size:16px}
+.cardbtn.curse{background:#d3d4de}
+.panel input{width:100%;font:500 22px var(--hand);padding:6px 10px;border:2px solid var(--ink);border-radius:8px;background:#fbfbf3;color:var(--ink)}
+.panel ul{margin:4px 0;padding-left:20px}.panel li{margin:2px 0}
+.panel h3{font:400 19px var(--serif);margin:12px 0 2px;letter-spacing:.04em}
+.done{text-decoration:line-through;color:#6b7190}
+.hint{color:var(--mute);font-size:13px;margin:0}
+.hint kbd{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 5px;font:600 12px var(--ui)}
+@media(max-width:640px){.panel{font-size:18px;padding:14px 16px}.panel .line{font-size:20px}.opts button{font-size:18px}}
+</style>
+
+<div class="app">
+  <header>
+    <h1>EVER <span>Inkwell Grimoire</span></h1>
+    <div class="st" id="st"></div>
+    <div class="tb"><button id="bDeck">Deck (C)</button><button id="bJour">Journal (J)</button><button id="bMenu">Menu</button></div>
+  </header>
+  <div class="stage" id="stage">
+    <div id="view"></div>
+    <div class="toast" id="toast"></div>
+    <div class="panel" id="panel" hidden></div>
+  </div>
+  <p class="hint"><kbd>WASD</kbd>/arrows or click to walk · <kbd>E</kbd> talk or use · in combat click cards (or <kbd>1</kbd>–<kbd>5</kbd>), click an enemy to target, <kbd>E</kbd> ends turn · world and soul are saved in this browser.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+if(!window.PIXI||!window.rough){$('view').innerHTML='<p style="padding:40px;color:#222">The drawing libraries (PixiJS and Rough.js) could not load. Check your connection and reload.</p>';throw new Error('libs')}
+
+/* ================= constants & helpers ================= */
+const CW=960,CH=600,S=Math.min(2,window.devicePixelRatio||1);
+const INK='#1e2230',PAPER='#dfe2d3';
+const WASH={teal:'#6fb3aa',ochre:'#dcae58',rose:'#d1697b',moss:'#8aa86f',indigo:'#6577b0',grey:'#a3a8b0'};
+const LIGHT={moss:'#cfd8bb',indigo:'#c5cade',grey:'#cfd0cc'};
+const H1=n=>{const s=Math.sin(n*127.1+311.7)*43758.5453;return s-Math.floor(s)};
+const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)],clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ================= layers: Rough.js draws, Pixi displays ================= */
+function mkLayer(){const cv=document.createElement('canvas');cv.width=CW*S;cv.height=CH*S;return{cv,ctx:cv.getContext('2d'),rc:rough.canvas(cv)}}
+const L0=mkLayer(),L1=mkLayer();
+const app=new PIXI.Application({width:CW*S,height:CH*S,backgroundAlpha:0,antialias:false,resolution:1});
+$('view').appendChild(app.view);
+const tex0=PIXI.Texture.from(L0.cv),tex1=PIXI.Texture.from(L1.cv);
+const sp0=new PIXI.Sprite(tex0),sp1=new PIXI.Sprite(tex1);app.stage.addChild(sp0,sp1);
+let SEED=1,sc=0;
+const op=(fill,x)=>Object.assign({stroke:INK,strokeWidth:1.5,roughness:1.2,bowing:1.1,seed:SEED+(sc++%13)*37,fill:fill||undefined,fillStyle:'solid'},x||{});
+const rect=(L,x,y,w,h,f,x2)=>L.rc.rectangle(x,y,w,h,op(f,x2));
+const ell=(L,x,y,w,h,f,x2)=>L.rc.ellipse(x,y,w,h,op(f,x2));
+const line=(L,a,b,c,d,x2)=>L.rc.line(a,b,c,d,op(null,x2));
+const pol=(L,pts,f,x2)=>L.rc.polygon(pts,op(f,x2));
+const path=(L,d,f,x2)=>L.rc.path(d,op(f,x2));
+const txt=(L,s,x,y,size,col,al,font)=>{const c=L.ctx;c.font=`700 ${size||20}px ${font||'Caveat'},cursive`;c.fillStyle=col||INK;c.textAlign=al||'left';c.textBaseline='alphabetic';c.fillText(s,x,y)};
+const fit=(L,s,x,y,size,maxW,col,al)=>{const c=L.ctx;c.font=`700 ${size}px Caveat,cursive`;let z=size;while(c.measureText(s).width>maxW&&z>9){z--;c.font=`700 ${z}px Caveat,cursive`}txt(L,s,x,y,z,col,al)};
+const wrapLines=(c,s,w)=>{const out=[];let l='';s.split(' ').forEach(x=>{const t=l?l+' '+x:x;if(c.measureText(t).width>w&&l){out.push(l);l=x}else l=t});if(l)out.push(l);return out};
+
+/* ================= cards ================= */
+const CARDS={
+ strike:{n:'Quill Strike',c:1,t:'atk',r:0,d:6,x:{d:9}},
+ guard:{n:'Ink Guard',c:1,t:'skill',r:0,b:5,x:{b:8}},
+ smudge:{n:'Smudge',c:0,t:'skill',r:0,b:2,draw:1,x:{b:4}},
+ ember:{n:'Ember Scrawl',c:2,t:'atk',r:0,d:5,burn:4,x:{burn:7}},
+ cleave:{n:'Broad Sweep',c:1,t:'atk',r:0,d:5,all:1,x:{d:8}},
+ bolt:{n:'Twin Lines',c:1,t:'atk',r:0,d:4,hits:2,x:{d:6}},
+ flourish:{n:'Flourish',c:0,t:'skill',r:0,draw:2,x:{draw:3}},
+ expose:{n:'Expose',c:1,t:'skill',r:1,vuln:2,draw:1,x:{vuln:3}},
+ mend:{n:'Mend Page',c:2,t:'skill',r:1,heal:7,b:4,x:{heal:11}},
+ bold:{n:'Bold Stroke',c:1,t:'power',r:1,str:2,x:{str:3}},
+ vigil:{n:'Vigil',c:2,t:'skill',r:1,b:13,x:{b:18}},
+ leech:{n:'Leech Ink',c:1,t:'atk',r:1,d:7,lif:3,x:{d:9,lif:5}},
+ avenger:{n:"Avenger's Edge",c:2,t:'atk',r:2,d:16,vuln:2,x:{d:22}},
+ rune:{n:'Soul Rune',c:1,t:'power',r:2,str:1,draw:1,b:6,x:{str:2,b:9}},
+ doubt:{n:'Doubt',c:-1,t:'curse',r:0,txt:'Unplayable. Clutters your hand.'},
+ hex:{n:'Hex',c:-1,t:'curse',r:0,txt:'Unplayable. If in hand at end of turn, lose 2 HP.'}
+};
+const cv=(id,up)=>Object.assign({},CARDS[id],up?CARDS[id].x:{});
+const cname=(id,up)=>CARDS[id].n+(up?'+':'');
+function ctext(id,up){const c=cv(id,up);if(c.txt)return c.txt;const a=[];
+  if(c.d)a.push(`Deal ${c.d}${c.hits>1?' ×'+c.hits:''}${c.all?' to all':''}.`);if(c.burn)a.push(`Burn ${c.burn}.`);if(c.vuln)a.push(`Vulnerable ${c.vuln}.`);
+  if(c.b)a.push(`Block ${c.b}.`);if(c.heal)a.push(`Heal ${c.heal}.`);if(c.lif)a.push(`Heal ${c.lif} per hit.`);if(c.str)a.push(`Gain ${c.str} strength.`);if(c.draw)a.push(`Draw ${c.draw}.`);
+  if(c.t==='power')a.push('Lasts the fight.');return a.join(' ')}
+const POOL=Object.keys(CARDS).filter(k=>CARDS[k].t!=='curse'&&k!=='avenger');
+const pickCard=(maxR)=>{const p=POOL.filter(k=>CARDS[k].r<=maxR);return pick(p)};
+
+/* ================= foes ================= */
+const FOES={
+ wolf:{n:'Ink Wolf',look:'wolf',hp:30,pat:[{t:'atk',v:6},{t:'atk',v:9},{t:'def',v:7}]},
+ cultist:{n:'Ash Cultist',look:'cultist',hp:24,pat:[{t:'curse',c:'doubt'},{t:'atk',v:7},{t:'buff',v:2},{t:'atk',v:7}]}
+};
+function makeBoss(){
+  const dead=Object.keys(NPC).filter(id=>W.npc[id]&&W.npc[id].alive===false);
+  if(dead.length){const id=dead[0];return{n:'Wraith of '+NPC[id].n.replace(/^(The|Elder) /,''),look:'ghost',hp:100,why:`You killed ${NPC[id].n}. Their grief walks the Cairn.`,pat:[{t:'atk',v:9},{t:'curse',c:'hex'},{t:'atk',v:13},{t:'def',v:10}],pat2:[{t:'atk',v:12},{t:'curse',c:'hex'},{t:'atk',v:16}]}}
+  if(run.curses>=2)return{n:'The Hex-Weaver',look:'weaver',hp:95,why:'You bargained at the altars. Every debt has a collector.',pat:[{t:'curse',c:'doubt'},{t:'atk',v:8},{t:'atk',v:8},{t:'buff',v:2}],pat2:[{t:'curse',c:'hex'},{t:'atk',v:11},{t:'atk',v:11}]};
+  if(W.flags.stole)return{n:'Warden of Thieves',look:'knight',hp:92,why:'You stole from people who remember. The Warden has your description.',pat:[{t:'atk',v:10},{t:'def',v:10},{t:'atk',v:12}],pat2:[{t:'atk',v:15},{t:'buff',v:3},{t:'atk',v:15}]};
+  return{n:'Hollow Knight',look:'knight',hp:90,why:'No one you wronged stands here. Only the Cairn itself.',pat:[{t:'atk',v:9},{t:'def',v:9},{t:'atk',v:11},{t:'buff',v:2}],pat2:[{t:'atk',v:14},{t:'atk',v:14},{t:'def',v:8}]}}
+
+/* ================= world, soul, run ================= */
+const KEY='ever-inkwell-v1';
+let W,SOUL,run,G={mode:'title',busy:false},scene=null,C=null,PANEL=null,goal=null,fx=[],mouse={x:0,y:0},P={x:480,y:500,face:1,walk:0};
+const fresh=()=>({W:{npc:{},flags:{},q:{},log:[]},SOUL:{lives:0,ng:0,mem:[],echo:null,perk:{},lastDeath:null,bosses:[]},run:null});
+function save(){try{localStorage.setItem(KEY,JSON.stringify({W,SOUL,run}))}catch(e){}}
+function loadSave(){try{const s=JSON.parse(localStorage.getItem(KEY));return s&&s.W?s:null}catch(e){return null}}
+const npcS=id=>W.npc[id]||(W.npc[id]={alive:true,rel:0});
+const rel=(id,d)=>{npcS(id).rel+=d};
+const chron=t=>{W.log.push({life:SOUL.lives+1,txt:t})};
+function newRun(){
+  const L=SOUL.lives,hp=L?40+Math.min(L,3)*2+(SOUL.perk.hp||0):46;
+  const deck=['strike','strike','strike','strike','guard','guard','guard','smudge'];if(SOUL.echo)deck.push(SOUL.echo);
+  run={page:0,hp,max:hp,gold:20+(SOUL.perk.gold||0),deck:deck.map(id=>({id,up:false})),taken:{},q:{},flags:{},berry:0,greeted:{},shop:null,curses:0};
+  if(L>=2)run.deck[0].up=true;
+  if(SOUL.echo&&SOUL.perk.bind)run.deck[run.deck.length-1].up=true;
+}
+const addCard=(id,up)=>{run.deck.push({id,up:!!up});if(CARDS[id].t==='curse')run.curses++};
+
+/* ================= NPCs & maps ================= */
+const NPC={
+ marcus:{n:'Marcus the Blacksmith',sub:'Ashbrook · grieving',col:'rose',look:'smith',gull:.3,brave:.9},
+ wren:{n:'Elder Wren',sub:'Ashbrook · keeper of the well',col:'teal',look:'elder',gull:.1,brave:.5},
+ pip:{n:'Pip the Merchant',sub:'Ashbrook · sells everything',col:'ochre',look:'merch',gull:.7,brave:.1},
+ hermit:{n:'The Ash Hermit',sub:'Ashwood · half-remembers you',col:'indigo',look:'hermit',gull:.4,brave:.6},
+ ghost:{n:'A Faded Self',sub:'Hollow Cairn · a page of you',col:'grey',look:'ghost',gull:0,brave:1}
+};
+const MAPS={
+ 0:{name:'Ashbrook Village',sub:'Homeland',wash:'moss',
+  obs:[{k:'house',x:90,y:100,w:150,h:95,c:'ochre'},{k:'smithy',x:400,y:80,w:170,h:100,c:'rose'},{k:'house',x:690,y:110,w:150,h:95,c:'teal'},{k:'well',x:470,y:350,w:56,h:56},{k:'tree',x:60,y:380,w:60,h:60},{k:'tree',x:860,y:410,w:60,h:60},{k:'tree',x:330,y:500,w:60,h:60},{k:'tree',x:640,y:490,w:60,h:60}],
+  npcs:[['marcus',470,215],['wren',250,270],['pip',700,285]],
+  things:[['forge',405,225],['board',320,230],['chest',110,330],['altar',860,320],['berry',150,520],['berry',570,430],['berry',770,480]],spawn:[480,520]},
+ 2:{name:'Ashwood',sub:'Borderlands',wash:'grey',
+  obs:[{k:'tree',x:80,y:120,w:60,h:60},{k:'tree',x:200,y:420,w:60,h:60},{k:'tree',x:420,y:100,w:60,h:60},{k:'rock',x:560,y:260,w:80,h:60},{k:'tree',x:820,y:420,w:60,h:60},{k:'rock',x:300,y:330,w:70,h:50},{k:'tree',x:700,y:100,w:60,h:60}],
+  npcs:[['hermit',300,230]],things:[['fire',480,350],['altar',770,230],['chest',130,470]],spawn:[100,520]},
+ 4:{name:'Hollow Cairn',sub:'Deep Frontier',wash:'indigo',
+  obs:[{k:'pillar',x:150,y:120,w:44,h:90},{k:'pillar',x:360,y:110,w:44,h:90},{k:'pillar',x:600,y:110,w:44,h:90},{k:'pillar',x:800,y:150,w:44,h:90},{k:'rock',x:420,y:380,w:90,h:60}],
+  npcs:[['ghost',480,230]],things:[['forge',250,320],['fire',720,440],['chest',860,260]],spawn:[100,520]}
+};
+const EXIT={x:830,y:515,w:110,h:75};
+function buildScene(pg){
+  const m=MAPS[pg],ents=[];
+  m.npcs.forEach(([id,x,y])=>{if(npcS(id).alive)ents.push({kind:'npc',id,x,y})});
+  m.things.forEach(([type,x,y],i)=>{const key=pg+':'+type+i;if(!run.taken[key]&&!(type==='forge'&&pg===0&&!npcS('marcus').alive))ents.push({kind:'thing',type,x,y,key})});
+  scene={pg,m,ents};P.x=m.spawn[0];P.y=m.spawn[1];goal=null}
+
+/* ================= panel (DOM) ================= */
+function panel(o){const el=$('panel');PANEL=o;el.hidden=false;el.className='panel'+(o.wide?' wide':'');
+  el.innerHTML=(o.sub?`<div class="sub">${o.sub}</div>`:'')+`<h2>${o.title}</h2><div>${o.html||''}</div><div class="opts${o.row?' row':''}" id="po"></div>`;
+  const box=el.querySelector('#po');(o.opts||[]).forEach(p=>{const b=document.createElement('button');b.textContent=p.t;if(p.dis)b.disabled=true;if(p.cls)b.className=p.cls;b.onclick=p.fn;box.append(b)});
+  if(o.after)o.after(el);el.scrollTop=0;const f=box.querySelector('button:not(:disabled)');if(f&&!o.nofocus)f.focus({preventScroll:true})}
+function closePanel(){PANEL=null;$('panel').hidden=true}
+let toastT=0;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),3400)}
+const cardBtn=(id,up,extra,price)=>`<span class="c">${CARDS[id].c<0?'×':CARDS[id].c}</span><b>${esc(cname(id,up))}</b><em>${esc(ctext(id,up))}</em>${price!=null?`<em>${price} gold</em>`:''}`;
+
+/* ================= "AI" (local script now, provider-shaped for later) ================= */
+const AI={tag:'AI is offline: a local script reads your words. A model can replace this later.'};
+const INT=[['attack',/kill|attack|stab|duel|punch|slay|challenge|fight you/],['steal',/steal|rob|pickpocket|swipe|lift/],['threaten',/threat|scare|or else|hurt|intimidat|warn/],['bribe',/pay|gold|coin|bribe|money|offer/],['deceive',/pretend|lie|king|noble|physician|spy|disguise|trick|claim/],['flatter',/flatter|wise|great|brilliant|skilled|admire|compliment|handsome/],['kind',/help|please|sorry|thank|kind|friend|comfort|apolog/]];
+const relWord=r=>r<=-3?'hostile':r<=-1?'wary':r>=3?'devoted':r>=1?'warm':'neutral';
+
+/* ================= dialogue ================= */
+function say(id,text,opts,free){
+  const o=opts.slice();if(free!==false&&npcS(id).rel>-3)o.push({t:'Try something else…',cls:'alt',fn:()=>freeBox(id)});
+  o.push({t:'Leave',cls:'ghostbtn',fn:closePanel});
+  panel({sub:NPC[id].sub+' · '+relWord(npcS(id).rel),title:NPC[id].n,html:`<p class="line">${text}</p>`,opts:o})}
+const again=id=>()=>talk[id]();
+function greet(id,line){const n=npcS(id);let pre='';
+  if(SOUL.lives>0&&!run.greeted[id]){run.greeted[id]=1;pre=pick([`<i>Their eyes linger on you. "Have we met?"</i> `,`<i>A flicker of recognition crosses their face.</i> `])}
+  if(n.rel<=-1&&id!=='ghost')pre+=`<i>Their jaw tightens.</i> `;return pre+line}
+function freeBox(id){panel({sub:'Free action',title:'What do you say or do?',html:`<input id="ft" maxlength="90" placeholder="e.g. I pretend to be the king's physician"><p class="tiny">${AI.tag}</p>`,
+  opts:[{t:'Do it',fn:()=>{const v=($('ft').value||'').trim();if(v)interpret(id,v)}},{t:'Back',cls:'ghostbtn',fn:again(id)}],nofocus:true,
+  after:()=>setTimeout(()=>{const i=$('ft');if(i){i.focus();i.onkeydown=e=>{if(e.key==='Enter'){const v=i.value.trim();if(v)interpret(id,v)}}}},0)})}
+function interpret(id,text){
+  const N=NPC[id],s=npcS(id),t=text.toLowerCase();let it='ask';for(const[k,re] of INT)if(re.test(t)){it=k;break}
+  const cont=m=>say(id,m,[{t:'Continue',fn:again(id)}],false);
+  if(id==='ghost'){return cont(it==='attack'?'You cannot strike what is already a memory. It smiles, a little sadly.':'The figure tilts its head, as if listening to someone long gone.')}
+  const q=W.q.m_ledger||0;
+  switch(it){
+   case 'attack':{rel(id,-5);chron(`Drew steel on ${N.n}.`);return startDuel(id)}
+   case 'steal':{if(Math.random()<.4+(1-N.brave)*.2){run.gold+=20;rel(id,-2);W.flags.stole=true;chron(`Stole 20 gold from ${N.n}.`);return cont('Your fingers are quick. You slip away with a heavy purse, and hope they do not count it.')}
+     rel(id,-2);run.hp=Math.max(1,run.hp-6);return cont('Caught! A sharp elbow finds your ribs. They will not forget this. (-6 HP)')}
+   case 'threaten':{if(id==='pip'&&q===1&&!W.flags.pipTold&&Math.random()>N.brave){rel(id,-1);return pipConfess('Pip squeaks and raises both hands.')}
+     if(Math.random()<N.brave){rel(id,-2);return cont('"Try that again and see what happens." They hold your gaze until you look away.')}rel(id,-1);return cont('They flinch. The mood in the room sours.')}
+   case 'bribe':{if(run.gold<20)return cont('You pat your pockets. Not enough coin for that gesture.');run.gold-=20;
+     if(id==='pip'&&q===1&&!W.flags.pipTold)return pipConfess('Pip counts the coins twice. "Fine, fine."');rel(id,1);return cont('They pocket the coins. "Generous. I will remember that." (-20 gold)')}
+   case 'deceive':{if(Math.random()<N.gull){run.gold+=15;rel(id,1);return cont('They buy it completely, and press a few coins on you as thanks. (+15 gold)')}rel(id,-1);return cont('They squint at you. "You are no such thing." Trust drains out of the room.')}
+   case 'flatter':{rel(id,1);if(Math.random()<.4){run.flags.discount=true;return cont('They preen. "For you, I might even bend a price." (Discounts unlocked this life)')}return cont('A small smile. It cost you nothing.')}
+   case 'kind':{rel(id,1);return cont('They soften a little. "That is kindly said."')}
+   default:return cont(pick(['They consider your words. "Hm. Not sure what you want from me, but I am listening."','"Ask me plainly," they say, "and I will answer plainly."']))}
+}
+function pipConfess(pre){W.flags.pipTold=true;chron('Pip confessed that the Ash Cult paid him to burn Marcus\'s ledger.');say('pip',`${pre} "The Ash Cult paid me to burn the ledger the night the boy died. That is all I know, I swear! Tell Marcus, not the guards."`,[{t:'Continue',fn:again('pip')}],false)}
+
+const talk={
+ marcus(){const s=npcS('marcus'),q=W.q.m_ledger||0;
+  if(s.rel<=-3)return say('marcus','Out of my forge. Now.',[],false);
+  if(q===0)return say('marcus',greet('marcus',"My son was murdered three nights ago. Nobody in this village will help me."),[
+    {t:"I'll help you find the killer.",fn:()=>{W.q.m_ledger=1;rel('marcus',2);chron("Promised to find the killer of Marcus's son.");say('marcus',"Thank you. He kept the ledger Pip sells ink for. Start with Pip.",[{t:'Continue',fn:again('marcus')}],false)}},
+    {t:'How much will you pay?',fn:()=>{rel('marcus',-1);say('marcus',"Pay? ...My forge will serve you for thirty gold a piece, and a blade of mine if you bring a name. Is that low enough for you?",[{t:'Back',fn:again('marcus')}])}},
+    {t:'Who do you suspect?',fn:()=>say('marcus',"The ledger vanished the same night. Pip sold the paper. Pip talks to cultists when he thinks no one looks.",[{t:'Back',fn:again('marcus')}])},
+    {t:"That's not my problem.",fn:()=>{rel('marcus',-2);chron('Refused to help Marcus after his son died.');say('marcus',"Then you are no better than the rest. Leave.",[],false)}}]);
+  if(q===1)return say('marcus',greet('marcus',"Any word about my son's killer?"),[
+    {t:W.flags.pipTold?'Pip confessed: the Ash Cult paid him to burn the ledger.':'Not yet.',fn:()=>{if(!W.flags.pipTold)return say('marcus',"Press Pip. He folds like paper.",[{t:'Back',fn:again('marcus')}]);
+      W.q.m_ledger=2;rel('marcus',3);run.gold+=40;addCard('avenger');chron('Marcus learned that the Ash Cult killed his son. He gave you his best blade.');toast("Card gained: Avenger's Edge");
+      say('marcus',"The Ash Cult. Then at least I know where to point my hate. Take this blade, and 40 gold. My forge is yours.",[{t:'Continue',fn:again('marcus')}],false)}}]);
+  return say('marcus',greet('marcus',SOUL.lives>0&&q===2?"You solved this once, in another life. I do not know how I know that. My forge is yours.":"The Ash Cult will answer for this. Need your cards sharpened?"),[{t:'Use the forge',fn:()=>forge(30)}]);
+ },
+ pip(){const s=npcS('pip'),q=W.q.m_ledger||0;
+  if(s.rel<=-3)return say('pip',"Shop is closed to you!",[],false);
+  const o=[{t:'Browse wares',fn:shop}];
+  if(q===1&&!W.flags.pipTold)o.push({t:'Ask about the burned ledger',fn:()=>say('pip',"Ledger? What ledger? I sell ink, friend, only ink!",[
+    {t:'Threaten him',fn:()=>{rel('pip',-1);pipConfess('Pip goes grey.')}},
+    {t:'Slip him 20 gold',dis:run.gold<20,fn:()=>{run.gold-=20;pipConfess('Pip pockets the coins.')}},
+    {t:'Speak gently',fn:()=>{if(npcS('pip').rel>=1)pipConfess('Pip sags with relief.');else say('pip',"I... I cannot. Come back when I trust you more.",[{t:'Back',fn:again('pip')}])}}])});
+  return say('pip',greet('pip',"Ink, candles, cards, everything for a price!"),o);
+ },
+ wren(){const s=npcS('wren'),b=run.q.berry||0;
+  const lore={t:'What do you know about souls?',fn:()=>say('wren',SOUL.lives>0?`"Souls return like ink bleeding through paper," she says. "You have turned ${SOUL.lives} page${SOUL.lives>1?'s':''} before. I can almost read them."`:`"Each soul is a page in a book nobody finished," she says.`,[{t:'Back',fn:again('wren')}])};
+  if(b===0)return say('wren',greet('wren',"Bring me three inkberries from the hedges around the village, and I will make it worth your while."),[{t:'I will gather them.',fn:()=>{run.q.berry=1;run.berry=0;say('wren',"Good. They hide near the well, the east trees and the south fence.",[{t:'Continue',fn:again('wren')}],false)}},lore]);
+  if(b===1){const ok=run.berry>=3;return say('wren',greet('wren',ok?"Three berries! Let me see.":`Inkberries, ${run.berry} of 3 so far.`),[{t:'Hand over the berries',dis:!ok,fn:()=>{run.q.berry=2;run.gold+=25;addCard('smudge');rel('wren',1);chron('Brought Elder Wren her inkberries.');toast('+25 gold, card: Smudge');say('wren',"Splendid. Take this, and a trick for your quill.",[{t:'Continue',fn:again('wren')}],false)}},lore])}
+  return say('wren',greet('wren',"The well remembers more than I do. Rest easy."),[lore]);
+ },
+ hermit(){const c=run.q.cinder||0;
+  const why={t:'Why do I keep waking up on page one?',fn:()=>say('hermit',SOUL.lives>0?`"Because you refuse to be finished. ${SOUL.mem.length?SOUL.mem[SOUL.mem.length-1]:''}"`:`"Because you will, soon enough. Ask me again after your first ending."`,[{t:'Back',fn:again('hermit')}])};
+  if(c===0)return say('hermit',greet('hermit',"The cultists at the Cairn guard an ember I need. Defeat them and bring it back."),[{t:'I will bring it.',fn:()=>{run.q.cinder=1;say('hermit',"They wait on the next page.",[{t:'Continue',fn:again('hermit')}],false)}},why]);
+  if(c===1)return say('hermit',greet('hermit',run.flags.cinder?"You smell of smoke. Is it the ember?":"Not yet. The cultists wait ahead."),[{t:'Give the cultist ember',dis:!run.flags.cinder,fn:()=>{run.q.cinder=2;addCard('ember',true);rel('hermit',2);chron('Gave the Ash Hermit the cultist ember.');toast('Card gained: Ember Scrawl+');say('hermit',"Warm. Take a scrap of the flame for your book.",[{t:'Continue',fn:again('hermit')}],false)}},why]);
+  return say('hermit',greet('hermit',"Fire remembers. So do I. Walk on."),[why]);
+ },
+ ghost(){const last=SOUL.mem.length?SOUL.mem[SOUL.mem.length-1]:'A shape you almost remember.';
+  return say('ghost',"You were here before. I am the page you left behind.",[
+   {t:'Who were you?',fn:()=>say('ghost',esc(last),[{t:'Back',fn:again('ghost')}],false)},
+   {t:'Take its memory (free upgrade)',dis:!!run.flags.ghostUp,fn:()=>{run.flags.ghostUp=1;forge(0)}},
+   {t:'What waits ahead?',fn:()=>{const b=makeBoss();say('ghost',`The world remembers. ${esc(b.why)} Beyond the next page: <b>${esc(b.n)}</b>.`,[{t:'Back',fn:again('ghost')}],false)}}],false)}
+};
+
+/* ================= shop / forge / altar / journal / deck ================= */
+function shop(){
+  const d=run.flags.discount?.8:1,price=r=>Math.floor([35,55,80][r]*d);
+  if(!run.shop)run.shop=[pickCard(0),pickCard(1),pickCard(1)].map(id=>({id,sold:false}));
+  const has=run.deck.some(c=>CARDS[c.id].t==='curse');
+  panel({sub:'Pip\'s cart',title:'Wares',wide:true,html:`<p>Gold: <b>${run.gold}</b></p><div class="cards" id="sc"></div>`,
+   after:el=>{const g=el.querySelector('#sc');run.shop.forEach((it,i)=>{const b=document.createElement('button'),p=price(CARDS[it.id].r);b.className='cardbtn';b.innerHTML=cardBtn(it.id,false,'',p);b.disabled=it.sold||run.gold<p;b.onclick=()=>{run.gold-=p;it.sold=true;addCard(it.id);toast('Bought '+CARDS[it.id].n);shop()};g.append(b)})},
+   opts:[{t:`Heal 10 HP (${Math.floor(25*d)} gold)`,dis:run.gold<Math.floor(25*d)||run.hp>=run.max,fn:()=>{run.gold-=Math.floor(25*d);run.hp=Math.min(run.max,run.hp+10);toast('+10 HP');shop()}},
+    {t:`Burn a curse (${Math.floor(40*d)} gold)`,dis:!has||run.gold<Math.floor(40*d),fn:()=>{const i=run.deck.findIndex(c=>CARDS[c.id].t==='curse');run.gold-=Math.floor(40*d);run.deck.splice(i,1);run.curses=Math.max(0,run.curses-1);toast('A curse is struck from your deck');shop()}},
+    {t:'Done',cls:'ghostbtn',fn:again('pip')}]})}
+function forge(cost){
+  const idx=run.deck.map((c,i)=>({c,i})).filter(x=>!x.c.up&&CARDS[x.c.id].t!=='curse');
+  panel({sub:cost?'Marcus\'s forge':'The Cairn remembers',title:cost?`Upgrade a card (${cost} gold)`:'Upgrade a card (free)',wide:true,html:`<p>Gold: <b>${run.gold}</b></p><div class="cards" id="fc"></div>${idx.length?'':'<p>Nothing left to improve.</p>'}`,
+   after:el=>{const g=el.querySelector('#fc');const seen={};idx.forEach(({c,i})=>{if(seen[c.id])return;seen[c.id]=1;const b=document.createElement('button');b.className='cardbtn';b.innerHTML=cardBtn(c.id,true,'');b.disabled=run.gold<cost;
+     b.onclick=()=>{run.gold-=cost;run.deck[i].up=true;toast(CARDS[c.id].n+' improved');chron(`Improved ${CARDS[c.id].n} at the forge.`);closePanel()};g.append(b)})},
+   opts:[{t:'Never mind',cls:'ghostbtn',fn:closePanel}]})}
+function altar(ent){
+  const give=(fn,msg)=>()=>{run.taken[ent.key]=1;fn();chron(msg);closePanel();toast(msg)};
+  panel({sub:'A cracked altar hums',title:'Bargain with the Hexes',html:'<p>Take power now. The ink remembers the price.</p>',opts:[
+   {t:'+10 max HP, and a Doubt card',fn:give(()=>{run.max+=10;run.hp+=10;addCard('doubt')},'Bargained: +10 max HP, gained Doubt.')},
+   {t:'+45 gold, and a Hex card',fn:give(()=>{run.gold+=45;addCard('hex')},'Bargained: +45 gold, gained Hex.')},
+   {t:'A rare card, plus Hex and Doubt',fn:give(()=>{addCard(pick(['bold','vigil','leech','mend','expose']),true);addCard('hex');addCard('doubt')},'Bargained: an upgraded rare card for Hex and Doubt.')},
+   {t:'Walk away',cls:'ghostbtn',fn:closePanel}]})}
+function journal(){
+  const qs=[];const m=W.q.m_ledger||0;
+  qs.push([m,'The Burned Ledger',m===0?'Marcus, the blacksmith, wants his son\'s killer found.':m===1?'Find out what Pip knows about the burned ledger.':'Solved: the Ash Cult did it.']);
+  const b=run.q.berry||0;qs.push([b?b===2?2:1:0,'Elder Wren\'s Inkberries',b===0?'Not started.':b===2?'Done.':`Gather 3 inkberries (${run.berry}/3).`]);
+  const c=run.q.cinder||0;qs.push([c?c===2?2:1:0,'The Hermit\'s Ember',c===0?'Not started.':c===2?'Done.':run.flags.cinder?'You have the ember. Return to the Hermit.':'Defeat the cultists at the Cairn.']);
+  const log=W.log.slice(-14).reverse().map(l=>`<li>Life ${l.life}: ${esc(l.txt)}</li>`).join('')||'<li>Nothing written yet.</li>';
+  panel({sub:`Life ${SOUL.lives+1} · NG+${SOUL.ng}`,title:'Journal',wide:true,html:`<h3>Quests</h3><ul>${qs.map(([s,t,d])=>`<li class="${s===2?'done':''}"><b>${t}</b>: ${d}</li>`).join('')}</ul>
+   <h3>Soul echoes</h3><ul>${SOUL.mem.length?SOUL.mem.slice(-5).reverse().map(x=>`<li>${esc(x)}</li>`).join(''):'<li>No past lives yet.</li>'}</ul><h3>Chronicle of the world</h3><ul>${log}</ul>`,opts:[{t:'Close',fn:closePanel}]})}
+function deckView(){
+  const m={};run.deck.forEach(c=>{const k=c.id+(c.up?'+':'');m[k]=m[k]||{...c,n:0};m[k].n++});
+  panel({sub:`${run.deck.length} cards`,title:'Your deck',wide:true,html:`<div class="cards">${Object.values(m).map(c=>`<div class="cardbtn ${CARDS[c.id].t==='curse'?'curse':''}">${cardBtn(c.id,c.up,'')}<em>× ${c.n}</em></div>`).join('')}</div>`,opts:[{t:'Close',fn:closePanel}]})}
+
+/* ================= things ================= */
+function useThing(e){
+  const done=()=>{run.taken[e.key]=1};
+  switch(e.type){
+   case 'forge':return scene.pg===0?(npcS('marcus').rel<=-3?toast('Marcus refuses to let you near the forge.'):forge(30)):(run.flags.ghostUp?toast('The anvil is cold.'):(run.flags.ghostUp=1,forge(0)));
+   case 'board':return journal();
+   case 'altar':return altar(e);
+   case 'chest':{done();const id=pickCard(scene.pg>=4?2:1),g=Math.round(rnd(10,25));run.gold+=g;addCard(id);chron(`Opened a chest and found ${CARDS[id].n}.`);toast(`Chest: ${CARDS[id].n} and ${g} gold`);return}
+   case 'fire':{done();const h=Math.min(15,run.max-run.hp);run.hp+=h;toast(h?`You rest at the fire. +${h} HP`:'You warm your hands. Already healthy.');return}
+   case 'berry':{done();run.berry++;toast(`Inkberry picked (${run.berry})`);return}}}
+function label(e){return e.kind==='npc'?'Speak with '+NPC[e.id].n:({forge:'Use the forge',board:'Read the notice board',altar:'Kneel at the altar',chest:'Open the chest',fire:'Rest by the fire',berry:'Pick inkberries'})[e.type]}
+function interact(e){if(e==='exit')return advance();if(e.kind==='npc'){if(NPC[e.id])talk[e.id]();return}useThing(e);hud()}
+function npcMark(id){const q=W.q.m_ledger||0;
+  if(id==='marcus')return q===0?'!':(q===1&&W.flags.pipTold)?'?':'';
+  if(id==='pip')return(q===1&&!W.flags.pipTold)?'!':'';
+  if(id==='wren')return!run.q.berry?'!':(run.q.berry===1&&run.berry>=3)?'?':'';
+  if(id==='hermit')return!run.q.cinder?'!':(run.q.cinder===1&&run.flags.cinder)?'?':'';return''}
+
+/* ================= page flow & turn animation ================= */
+function snapshot(){const cv=document.createElement('canvas');cv.width=CW*S;cv.height=CH*S;const c=cv.getContext('2d');c.drawImage(L0.cv,0,0);c.drawImage(L1.cv,0,0);return cv}
+function turn(dir,after){return new Promise(res=>{
+  const snap=snapshot();after&&after();renderAll(true);
+  const tx=PIXI.Texture.from(snap),old=new PIXI.Sprite(tx),sh=new PIXI.Graphics();const Wd=CW*S;
+  if(dir>0){old.anchor.set(0,0);old.x=0}else{old.anchor.set(1,0);old.x=Wd}
+  app.stage.addChild(old,sh);G.busy=true;const t0=performance.now(),dur=620;
+  const tick=()=>{const p=clamp((performance.now()-t0)/dur,0,1),e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    old.scale.x=Math.max(.001,1-e);old.skew.y=(dir>0?1:-1)*Math.sin(p*Math.PI)*.045;
+    sh.clear();const ex=dir>0?Wd*(1-e):Wd*e;for(let i=0;i<6;i++){sh.beginFill(0x1e2230,.12*Math.sin(p*Math.PI)*(1-i/6));sh.drawRect(dir>0?ex:ex-(i+1)*14*S,0,(i+1)*14*S,CH*S);sh.endFill()}
+    if(p>=1){app.ticker.remove(tick);app.stage.removeChild(old,sh);old.destroy();sh.destroy();tx.destroy(true);G.busy=false;res()}};
+  app.ticker.add(tick)})}
+async function go(i,dir=1){
+  await turn(dir,()=>{run.page=i;closePanel();
+    if(MAPS[i]){buildScene(i);C=null;G.mode='rpg';save()}
+    else if(i===1)beginCombat({foes:[FOES.wolf,FOES.wolf].slice(0,SOUL.ng>0?2:1).map(f=>({...f})),next:2,intro:'Ink Wolves pad out of the margin.'});
+    else if(i===3)beginCombat({foes:[FOES.cultist,FOES.cultist],next:4,intro:'Ash Cultists chant over a dying ember.',cinder:true});
+    else if(i===5){const b=makeBoss();beginCombat({foes:[b],next:6,boss:true,intro:'BOSS: '+b.n+'. '+b.why})}
+    else if(i===6){G.mode='epi';C=null;epilogue()}});
+  hud();
+  if(SOUL.lastDeath&&SOUL.lastDeath.page===i&&G.mode!=='epi'){toast(`A memory surfaces: you fell here before, to ${SOUL.lastDeath.by}.`);SOUL.lastDeath=null}
+  else if(i===0&&SOUL.lives>0&&dir<0)toast(SOUL.mem[SOUL.mem.length-1]||'A new page. Faint echoes stir.');
+}
+function advance(){if(G.busy||PANEL)return;const nxt=run.page+1;go(nxt)}
+async function startDuel(id){closePanel();const N=NPC[id];
+  await turn(1,()=>{beginCombat({foes:[{n:N.n,look:'man',hp:34,pat:[{t:'atk',v:7},{t:'def',v:6},{t:'atk',v:10}]}],duel:id,intro:N.n+' fights back.'})});hud()}
+
+/* ================= combat ================= */
+function mkFoe(d){const k=1+.25*SOUL.ng,hp=Math.round(d.hp*k),a=v=>v?v+SOUL.ng:v;
+  return{...d,hp,max:hp,i:0,block:0,burn:0,vuln:0,str:0,shake:0,dead:false,pat:d.pat.map(p=>({...p,v:a(p.v)})),pat2:d.pat2&&d.pat2.map(p=>({...p,v:a(p.v)}))}}
+const intent=e=>{const p=(e.pat2&&e.hp<=e.max/2)?e.pat2:e.pat;return p[e.i%p.length]};
+function beginCombat(def){G.mode='combat';
+  C={def,foes:def.foes.map(mkFoe),draw:shuffle(run.deck.map(c=>({...c}))),disc:[],hand:[],energy:3,block:0,str:0,target:0,turn:0,busy:false,over:false,shakeP:0,rects:[],hover:-1,log:def.intro||''};
+  fx=[];playerStart();toast(def.intro||'')}
+function drawN(n){for(let k=0;k<n;k++){if(!C.draw.length){if(!C.disc.length)break;C.draw=shuffle(C.disc);C.disc=[]}C.hand.push(C.draw.pop())}}
+function playerStart(){C.turn++;C.energy=3;C.block=0;drawN(5)}
+const alive=()=>C.foes.filter(f=>!f.dead);
+function floatTxt(x,y,s,col){fx.push({x,y,s,col,t:0})}
+const foePos=(i,n,boss)=>n===1?[boss?650:640,270]:[i?790:540,270];
+function hitFoe(e,base,hits){let tot=0;const i=C.foes.indexOf(e),[fx0,fy0]=foePos(i,C.foes.length,C.def.boss);
+  for(let h=0;h<(hits||1);h++){let d=base+C.str;if(e.vuln>0)d=Math.floor(d*1.5);const ab=Math.min(e.block,d);e.block-=ab;const dealt=d-ab;e.hp-=dealt;tot+=dealt;e.shake=.3;floatTxt(fx0+rnd(-20,20),fy0-90,'-'+d,'#b02a3c')}
+  if(e.hp<=0&&!e.dead){e.dead=true;e.hp=0;C.log=e.n+' is struck from the page.'}return tot}
+function hurt(d){const ab=Math.min(C.block,d);C.block-=ab;const r=d-ab;run.hp-=r;C.shakeP=.3;floatTxt(170,300,'-'+r,'#b02a3c');if(ab)floatTxt(210,330,'blocked '+ab,'#3f6fa8')}
+function playCard(i){if(G.busy||C.busy||C.over||PANEL)return;const card=C.hand[i];if(!card)return;const c=cv(card.id,card.up);
+  if(c.c<0){toast(CARDS[card.id].n+' cannot be played.');return}if(c.c>C.energy){toast('Not enough ink (energy).');return}
+  if(!alive().includes(C.foes[C.target]))C.target=C.foes.indexOf(alive()[0]);const tg=C.foes[C.target];
+  C.energy-=c.c;
+  if(c.d){const list=c.all?alive():[tg];list.forEach(e=>{const dealt=hitFoe(e,c.d,c.hits);if(c.lif&&dealt>0){run.hp=Math.min(run.max,run.hp+c.lif*(c.hits||1));floatTxt(170,300,'+'+c.lif,'#2f8a55')}})}
+  if(c.burn&&tg&&!tg.dead)tg.burn+=c.burn;if(c.vuln&&tg&&!tg.dead)tg.vuln+=c.vuln;
+  if(c.b){C.block+=c.b;floatTxt(210,330,'+'+c.b+' block','#3f6fa8')}if(c.heal){const h=Math.min(c.heal,run.max-run.hp);run.hp+=h;floatTxt(170,300,'+'+h,'#2f8a55')}
+  if(c.str){C.str+=c.str;floatTxt(130,300,'+'+c.str+' str','#a8661f')}
+  C.hand.splice(i,1);if(c.t!=='power')C.disc.push(card);if(c.draw)drawN(c.draw);
+  C.log=cname(card.id,card.up)+'.';if(alive().length===0){C.over=true;setTimeout(winCombat,800)}}
+async function endTurn(){if(G.busy||C.busy||C.over||PANEL)return;C.busy=true;
+  C.hand.filter(c=>c.id==='hex').forEach(()=>{run.hp-=2;floatTxt(170,290,'-2 hex','#6a4a8a')});C.shakeP=C.hand.some(c=>c.id==='hex')?.3:0;
+  C.disc.push(...C.hand);C.hand=[];
+  if(run.hp<=0){C.busy=false;return die('a Hex')}
+  for(const e of alive()){await wait(480);
+    e.block=0;if(e.burn>0){e.hp-=e.burn;floatTxt(...foePos(C.foes.indexOf(e),C.foes.length,C.def.boss),'-'+e.burn+' burn','#c8641e');e.burn--;if(e.hp<=0){e.dead=true;e.hp=0;continue}}
+    const it=intent(e),[ex,ey]=foePos(C.foes.indexOf(e),C.foes.length,C.def.boss);
+    if(it.t==='atk'){hurt(it.v+e.str);e.lunge=.3;C.log=e.n+' strikes for '+(it.v+e.str)+'.'}
+    else if(it.t==='def'){e.block+=it.v;C.log=e.n+' guards.'}
+    else if(it.t==='buff'){e.str+=it.v;floatTxt(ex,ey-90,'+'+it.v+' str','#a8661f');C.log=e.n+' grows bolder.'}
+    else if(it.t==='curse'){C.disc.push({id:it.c,up:false});floatTxt(ex-60,ey-60,'+'+CARDS[it.c].n,'#6a4a8a');C.log=e.n+' scrawls a curse into your deck.'}
+    e.i++;if(e.vuln>0)e.vuln--;
+    if(run.hp<=0){C.busy=false;return die(e.n)}}
+  if(alive().length===0){C.over=true;C.busy=false;return setTimeout(winCombat,500)}
+  await wait(300);playerStart();C.busy=false}
+function winCombat(){
+  const d=C.def;
+  if(d.duel){const id=d.duel,N=NPC[id];npcS(id).alive=false;chron(`Killed ${N.n} in a duel.`);run.gold+=25;
+    panel({title:'The duel ends',html:`<p>${esc(N.n)} lies still. The world will remember. (+25 gold)</p>`,opts:[{t:'Turn back to the page',fn:async()=>{closePanel();await turn(-1,()=>{G.mode='rpg';C=null;buildScene(scene.pg)});hud()}}]});return}
+  if(d.cinder)run.flags.cinder=true;
+  if(d.boss){chron(`Defeated ${C.foes[0].n}.`);SOUL.bosses.push(C.foes[0].n);return go(6)}
+  const g=Math.round(rnd(22,36));run.gold+=g;const opts=[pickCard(run.page>=3?2:1),pickCard(1),pickCard(run.page>=3?2:0)];
+  const pg=run.page;
+  panel({sub:'Victory',title:'Spoils of the page',wide:true,html:`<p>You earned <b>${g}</b> gold. Take one card, or skip for 10 more gold.</p><div class="cards" id="rw"></div>`,
+   after:el=>{const grid=el.querySelector('#rw');opts.forEach(id=>{const b=document.createElement('button');b.className='cardbtn';b.innerHTML=cardBtn(id,false,'');b.onclick=()=>{addCard(id);toast('Card gained: '+CARDS[id].n);go(d.next)};grid.append(b)})},
+   opts:[{t:'Skip (+10 gold)',cls:'ghostbtn',fn:()=>{run.gold+=10;go(d.next)}}]})}
+function die(by){
+  C.over=true;SOUL.lives++;const n=SOUL.lives,pg=run.page;
+  const best=run.deck.filter(c=>CARDS[c.id].t!=='curse').sort((a,b)=>(CARDS[b.id].r+(b.up?1:0))-(CARDS[a.id].r+(a.up?1:0)))[0];
+  SOUL.echo=best?best.id:null;SOUL.mem.push(`Life ${n} ended on page ${pg+1}, felled by ${by}. You carried ${best?CARDS[best.id].n:'nothing'}.`);
+  SOUL.lastDeath={page:pg,by};chron(`Died to ${by} on page ${pg+1}.`);
+  panel({sub:`Life ${n} ends`,title:'The ink runs',html:`<p class="line">${esc(by)} ends your story on page ${pg+1}. The page is torn out. Your soul remembers one card (${best?esc(CARDS[best.id].n):'none'}), and the world keeps everything you did.</p>`,
+   opts:[{t:'Reincarnate: back to page 1',fn:async()=>{closePanel();const k=Math.min(pg,4);run=null;newRun();save();
+     for(let i=0;i<k;i++){await turn(-1,()=>{G.mode='title2'});await wait(60)}await turn(-1,()=>{buildScene(0);G.mode='rpg';C=null;run.page=0});hud();
+     toast(SOUL.mem[SOUL.mem.length-1])}}]})}
+function epilogue(){const b=SOUL.bosses[SOUL.bosses.length-1];
+  panel({sub:'Epilogue · one last decision',title:`${esc(b)} falls`,html:'<p class="line">The book lets you write one more line before it closes. What happens to what remains?</p>',opts:[
+   {t:'Spare what is left of it',fn:()=>finish('Spared the remains. Villagers feel safer, and softer toward strangers.',()=>{Object.keys(NPC).forEach(id=>{if(npcS(id).alive)rel(id,1)});W.flags.spared=true})},
+   {t:'Burn the remains for good',fn:()=>finish('Burned the remains. Your soul carries a little more gold.',()=>{SOUL.perk.gold=(SOUL.perk.gold||0)+15})},
+   {t:'Bind its power into your soul',fn:()=>finish('Bound its power. Your next echo returns sharper, and your soul runs a little hardier.',()=>{SOUL.perk.bind=1;SOUL.perk.hp=(SOUL.perk.hp||0)+3})}]})}
+async function finish(msg,fn){chron('Epilogue: '+msg);fn();SOUL.lives++;SOUL.ng++;SOUL.mem.push(`Life ${SOUL.lives} ended in victory over ${SOUL.bosses[SOUL.bosses.length-1]}. The world is now harder (NG+${SOUL.ng}).`);
+  const best=run.deck.filter(c=>CARDS[c.id].t!=='curse').sort((a,b)=>(CARDS[b.id].r+(b.up?1:0))-(CARDS[a.id].r+(a.up?1:0)))[0];SOUL.echo=best?best.id:null;
+  closePanel();run=null;newRun();save();await turn(-1,()=>{buildScene(0);G.mode='rpg';run.page=0});hud();toast(`NG+${SOUL.ng}: the book begins again, and the world remembers.`)}
+
+/* ================= title / menu ================= */
+function title(){const sv=loadSave();G.mode='title';
+  panel({sub:'EVER · Evolving Virtual Experiences & Reincarnation',title:'Inkwell Grimoire',nofocus:false,html:`<p class="line">A book that remembers every life you spend in it. Walk the pages, bargain, fight, and die. Turn back to page one, and the world will still know your name.</p>${sv?`<p class="tiny">Saved: life ${sv.SOUL.lives+1}, NG+${sv.SOUL.ng}, ${sv.W.log.length} chronicle entries.</p>`:''}`,
+   opts:[...(sv&&sv.run?[{t:'Continue this life',fn:()=>start(sv,true)}]:[]),...(sv?[{t:'New life in this world',fn:()=>start(sv,false)}]:[]),{t:sv?'Erase the book and start over':'Open the book',cls:sv?'ghostbtn':'',fn:()=>start(fresh(),false)}]})}
+function start(s,cont){W=s.W;SOUL=s.SOUL;if(cont&&s.run){run=s.run}else newRun();closePanel();G.busy=false;
+  const pg=MAPS[run.page]?run.page:0;run.page=pg;buildScene(pg);G.mode='rpg';C=null;hud();save();toast(SOUL.lives?SOUL.mem[SOUL.mem.length-1]:'Page 1. Speak to the villagers. Ink your fate.')}
+function menu(){if(!run)return;panel({title:'Menu',opts:[{t:'Resume',fn:closePanel},{t:'Save and return to the cover',fn:()=>{if(G.mode==='rpg')save();closePanel();run=null;C=null;title()}},{t:'Erase everything',cls:'ghostbtn',fn:()=>{try{localStorage.removeItem(KEY)}catch(e){}run=null;C=null;title()}}]})}
+
+/* ================= HUD ================= */
+function hud(){const el=$('st');if(!run||!SOUL){el.innerHTML='<span>Cover</span>';return}
+  const nm=MAPS[run.page]?MAPS[run.page].name:['','Encounter','','Encounter','','Boss page','Epilogue'][run.page]||'';
+  el.innerHTML=`<span>Life ${SOUL.lives+1}${SOUL.ng?` · NG+${SOUL.ng}`:''}</span><span>Page ${run.page+1}/7 · ${nm}</span><span class="hp">HP ${Math.max(0,run.hp)}/${run.max}</span><span class="gd">${run.gold} gold</span><span>Deck ${run.deck.length}${run.curses?` · ${run.curses} curse${run.curses>1?'s':''}`:''}</span>`}
+setInterval(()=>{if(run)hud()},400);
+$('bDeck').onclick=()=>{if(run&&!G.busy)deckView()};$('bJour').onclick=()=>{if(run&&!G.busy)journal()};$('bMenu').onclick=()=>{if(!G.busy)menu()};
+
+/* ================= input ================= */
+const keys={};
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)&&!PANEL)e.preventDefault();
+  if(k==='Escape'&&PANEL&&G.mode!=='title'&&!PANEL.noesc){closePanel();return}
+  if(PANEL||G.busy||!run)return;
+  if(k==='c')deckView();else if(k==='j')journal();
+  else if(G.mode==='rpg'&&(k==='e'||k===' ')){const n=nearest();if(n)interact(n);else if(inExit())advance()}
+  else if(G.mode==='combat'&&C){if(k==='e'||k==='Enter')endTurn();else if(/^[1-9]$/.test(k))playCard(+k-1)}});
+addEventListener('keyup',e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=false});
+function pm(e){const r=app.view.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*CW;mouse.y=(e.clientY-r.top)/r.height*CH}
+app.view.addEventListener('pointermove',pm);
+app.view.addEventListener('pointerdown',e=>{pm(e);if(PANEL||G.busy||!run)return;
+  if(G.mode==='rpg'){const hit=scene.ents.find(en=>Math.hypot(en.x-mouse.x,en.y-mouse.y)<42);
+    if(hit)goal={x:hit.x,y:hit.y+30,act:hit};else if(mouse.x>EXIT.x&&mouse.y>EXIT.y)goal={x:EXIT.x+EXIT.w/2,y:EXIT.y+EXIT.h/2,act:'exit'};else goal={x:mouse.x,y:mouse.y}}
+  else if(G.mode==='combat'&&C&&!C.over){
+    for(let k=C.rects.length-1;k>=0;k--){const r=C.rects[k];if(mouse.x>=r.x&&mouse.x<=r.x+r.w&&mouse.y>=r.y&&mouse.y<=r.y+r.h){playCard(r.i);return}}
+    if(mouse.x>780&&mouse.x<920&&mouse.y>420&&mouse.y<480){endTurn();return}
+    C.foes.forEach((f,i)=>{const[x,y]=foePos(i,C.foes.length,C.def.boss);if(!f.dead&&Math.abs(mouse.x-x)<80&&Math.abs(mouse.y-y)<110)C.target=i})}});
+
+/* ================= RPG update ================= */
+const inExit=()=>P.x>EXIT.x&&P.y>EXIT.y;
+function nearest(){let b=null,bd=62;scene.ents.forEach(e=>{const d=Math.hypot(e.x-P.x,e.y-P.y+20);if(d<bd){bd=d;b=e}});return b}
+function blocked(x,y){for(const o of scene.m.obs){if(x>o.x-11&&x<o.x+o.w+11&&y>o.y+(o.k==='house'||o.k==='smithy'?20:0)-8&&y<o.y+o.h+8)return true}
+  for(const e of scene.ents)if(e.kind==='npc'&&Math.hypot(e.x-x,e.y-y)<24)return true;return false}
+function updateRpg(dt){if(PANEL||G.busy)return;let dx=0,dy=0;
+  if(keys.a||keys.ArrowLeft)dx--;if(keys.d||keys.ArrowRight)dx++;if(keys.w||keys.ArrowUp)dy--;if(keys.s||keys.ArrowDown)dy++;
+  if(dx||dy)goal=null;else if(goal){const gx=goal.x-P.x,gy=goal.y-P.y,d=Math.hypot(gx,gy);
+    if(d<(goal.act?(goal.act==='exit'?20:50):6)){const a=goal.act;goal=null;if(a)interact(a)}else{dx=gx/d;dy=gy/d}}
+  const l=Math.hypot(dx,dy);if(l){dx/=l;dy/=l;const sp=175*dt;let nx=P.x+dx*sp,ny=P.y+dy*sp;nx=clamp(nx,44,CW-44);ny=clamp(ny,70,CH-40);
+    if(!blocked(nx,P.y))P.x=nx;else if(goal&&!goal.act)goal=null;if(!blocked(P.x,ny))P.y=ny;else if(goal&&!goal.act)goal=null;P.walk+=dt*10;if(Math.abs(dx)>.2)P.face=dx>0?1:-1}}
+
+/* ================= drawing: static layer ================= */
+function base(L,num,label){const c=L.ctx;c.setTransform(S,0,0,S,0,0);c.globalAlpha=1;c.fillStyle=PAPER;c.fillRect(0,0,CW,CH);
+  for(let i=0;i<80;i++){c.fillStyle='rgba(60,60,40,.07)';c.fillRect(H1(i)*CW,H1(i+99)*CH,2,2)}
+  rect(L,22,18,CW-44,CH-36,null,{roughness:2.2,strokeWidth:2.2});
+  if(label)txt(L,label,CW/2,58,28,INK,'center','IM Fell English SC');txt(L,'— '+num+' —',CW/2,CH-28,22,INK,'center')}
+function drawObs(L,o){const c=o.c?WASH[o.c]:null;
+  if(o.k==='house'||o.k==='smithy'){rect(L,o.x,o.y+28,o.w,o.h-28,'#e8e2cc');pol(L,[[o.x-10,o.y+32],[o.x+o.w/2,o.y-6],[o.x+o.w+10,o.y+32]],c);rect(L,o.x+o.w/2-14,o.y+o.h-42,28,42,'#9aa3bd');rect(L,o.x+14,o.y+46,26,22,'#bcd5d8');
+    if(o.k==='smithy'){rect(L,o.x+o.w-34,o.y-20,18,34,'#a9a79a');path(L,`M${o.x+o.w-25} ${o.y-24} q-8 -14 4 -24 q10 -10 -2 -22`,null,{strokeWidth:1})}}
+  else if(o.k==='tree'){line(L,o.x+30,o.y+60,o.x+30,o.y+28,{strokeWidth:3});ell(L,o.x+30,o.y+20,56,52,WASH.moss);path(L,`M${o.x+14} ${o.y+14} q8 -6 14 2 M${o.x+32} ${o.y+24} q8 -6 14 2`,null,{strokeWidth:1})}
+  else if(o.k==='well'){ell(L,o.x+28,o.y+34,56,30,'#c9c6b8');ell(L,o.x+28,o.y+30,40,18,'#6e8aa6');line(L,o.x+4,o.y+30,o.x+4,o.y-10);line(L,o.x+52,o.y+30,o.x+52,o.y-10);line(L,o.x,o.y-10,o.x+56,o.y-10,{strokeWidth:2.5})}
+  else if(o.k==='rock'){pol(L,[[o.x,o.y+o.h],[o.x+8,o.y+14],[o.x+o.w*.5,o.y],[o.x+o.w-6,o.y+18],[o.x+o.w,o.y+o.h]],'#b9bbc2');line(L,o.x+o.w*.3,o.y+10,o.x+o.w*.4,o.y+o.h-8,{strokeWidth:1})}
+  else if(o.k==='pillar'){rect(L,o.x,o.y+10,o.w,o.h-10,'#c4c7d6');rect(L,o.x-6,o.y,o.w+12,14,'#aeb2c8');rect(L,o.x-6,o.y+o.h-8,o.w+12,12,'#aeb2c8');line(L,o.x+14,o.y+20,o.x+14,o.y+o.h-12,{strokeWidth:1});line(L,o.x+30,o.y+20,o.x+30,o.y+o.h-12,{strokeWidth:1})}}
+function drawStatic(){const L=L0;sc=0;
+  if(G.mode==='rpg'&&scene){const m=scene.m;base(L,scene.pg+1,m.name+' · '+m.sub);
+    pol(L,[[44,150],[300,128],[620,146],[916,122],[916,556],[44,556]],LIGHT[m.wash],{roughness:2,strokeWidth:1});
+    path(L,'M470 560 Q 440 420 520 330 T 700 190 T 880 130',null,{strokeWidth:1,roughness:2});path(L,'M520 560 Q 500 440 580 350 T 760 215 T 900 160',null,{strokeWidth:1,roughness:2});
+    scene.m.obs.slice().sort((a,b)=>a.y-b.y).forEach(o=>drawObs(L,o));
+    pol(L,[[CW-118,CH-18],[CW-22,CH-110],[CW-22,CH-18]],'#cdd1bb',{strokeWidth:1.5});path(L,`M${CW-118} ${CH-18} Q ${CW-70} ${CH-70} ${CW-22} ${CH-110}`,null,{strokeWidth:1})}
+  else if(G.mode==='combat'&&C){base(L,run.page+1,C.def.boss?'Boss Page':C.def.duel?'A Duel':'Encounter');
+    path(L,'M60 440 Q 300 420 520 440 T 900 430',null,{strokeWidth:1.2,roughness:2});for(let i=0;i<14;i++){const x=70+i*62+H1(i)*20,y=424+H1(i+5)*20;line(L,x,y,x+4,y-9,{strokeWidth:1});line(L,x+5,y,x+8,y-7,{strokeWidth:1})}}
+  else if(G.mode==='epi'){base(L,7,'Epilogue');for(let i=0;i<5;i++)ell(L,CW/2,300,120+i*50,120+i*50,null,{strokeWidth:1+i*.3,roughness:2+i*.4});txt(L,'EVER',CW/2,320,90,INK,'center','IM Fell English SC')}
+  else{base(L,'',null);for(let i=0;i<5;i++)ell(L,CW/2,260,110+i*46,110+i*46,i===2?WASH.teal+'55':null,{strokeWidth:1+i*.3,roughness:2+i*.4});txt(L,'EVER',CW/2,285,96,INK,'center','IM Fell English SC');txt(L,'Inkwell Grimoire',CW/2,350,34,INK,'center','Caveat')}}
+
+/* ================= drawing: dynamic layer ================= */
+function figure(L,x,y,look,col,t,o){o=o||{};const b=Math.sin(t*3+x)*1.5,c=L.ctx;c.save();if(look==='ghost')c.globalAlpha=.6;
+  ell(L,x,y+26,34,10,'rgba(30,34,48,.18)',{stroke:'rgba(0,0,0,0)'});
+  pol(L,[[x-15,y+24],[x,y-14+b],[x+15,y+24]],WASH[col]);ell(L,x,y-24+b,19,19,'#efe1c8');
+  if(look==='smith'){line(L,x+18,y+20,x+18,y-8,{strokeWidth:2});rect(L,x+10,y-14,16,9,'#8d93a6')}
+  else if(look==='elder'||look==='hermit'){line(L,x-20,y+24,x-20,y-30,{strokeWidth:2});pol(L,[[x-11,y-30+b],[x,y-48+b],[x+11,y-30+b]],look==='elder'?WASH.teal:WASH.indigo)}
+  else if(look==='merch'){rect(L,x-14,y-44+b,28,8,WASH.ochre);rect(L,x-24,y+4,16,16,'#d9c9a0')}
+  else if(look==='ghost'){c.globalAlpha=.4;ell(L,x,y-24+b,24,24,'#fff')}
+  if(!o.noEyes){c.fillStyle=INK;c.fillRect(x-4,y-26+b,2,2);c.fillRect(x+3,y-26+b,2,2)}c.restore()}
+function drawPlayer(L,x,y,t,face,moving){const b=moving?Math.abs(Math.sin(P.walk))*3:Math.sin(t*2)*1;
+  ell(L,x,y+26,34,10,'rgba(30,34,48,.2)',{stroke:'rgba(0,0,0,0)'});pol(L,[[x-17,y+24],[x,y-14-b],[x+17,y+24]],WASH.teal);ell(L,x,y-25-b,20,20,'#efe1c8');
+  pol(L,[[x-13,y-32-b],[x,y-48-b],[x+13,y-32-b]],'#52608f');line(L,x+face*20,y+24,x+face*20,y-22-b,{strokeWidth:2.2});ell(L,x+face*20,y-26-b,8,8,WASH.ochre);
+  L.ctx.fillStyle=INK;L.ctx.fillRect(x+face*4-1,y-27-b,2,2);L.ctx.fillRect(x+face*9-1,y-27-b,2,2)}
+function thing(L,e,t){const x=e.x,y=e.y;
+  if(e.type==='chest'){rect(L,x-20,y-8,40,26,WASH.ochre);rect(L,x-22,y-18,44,14,'#c28f3a');rect(L,x-4,y-6,8,8,'#f1e5b0')}
+  else if(e.type==='altar'){rect(L,x-22,y-6,44,26,'#aab0c6');rect(L,x-28,y-14,56,12,'#8b92ad');const f=Math.sin(t*5)*3;pol(L,[[x-8,y-14],[x,y-34-f],[x+8,y-14]],WASH.rose);path(L,`M${x-8} ${y+8} q8 -12 16 0`,null,{strokeWidth:1})}
+  else if(e.type==='forge'){rect(L,x-24,y-4,48,10,'#7f8597');pol(L,[[x-14,y+6],[x+14,y+6],[x+8,y+24],[x-8,y+24]],'#6b7185');for(let i=0;i<3;i++)ell(L,x-6+i*6+Math.sin(t*9+i)*3,y-12-((t*40+i*13)%18),3,3,WASH.ochre,{stroke:'rgba(0,0,0,0)'})}
+  else if(e.type==='fire'){for(let i=0;i<3;i++){const f=Math.sin(t*8+i*2)*4;pol(L,[[x-12+i*10,y+12],[x-6+i*10,y-18-f],[x+i*10,y+12]],i===1?WASH.ochre:WASH.rose)}line(L,x-18,y+14,x+18,y+18,{strokeWidth:2.5});line(L,x+18,y+14,x-18,y+18,{strokeWidth:2.5})}
+  else if(e.type==='berry'){ell(L,x,y,40,28,WASH.moss);for(let i=0;i<4;i++)ell(L,x-12+i*8,y-4+(i%2)*6,7,7,'#5a3f8a',{stroke:'rgba(0,0,0,0)'})}
+  else if(e.type==='board'){line(L,x-12,y+22,x-12,y-20,{strokeWidth:2.5});line(L,x+12,y+22,x+12,y-20,{strokeWidth:2.5});rect(L,x-24,y-24,48,32,'#e8e2cc');line(L,x-16,y-14,x+16,y-14,{strokeWidth:1});line(L,x-16,y-6,x+8,y-6,{strokeWidth:1})}}
+function drawRpgDyn(L,t){const ents=scene.ents.slice().sort((a,b)=>a.y-b.y);const nr=nearest();let drewP=false;
+  const moving=!!(keys.a||keys.d||keys.w||keys.s||keys.ArrowLeft||keys.ArrowRight||keys.ArrowUp||keys.ArrowDown||goal);
+  const dp=()=>{if(!drewP){drewP=true;drawPlayer(L,P.x,P.y,t,P.face,moving)}};
+  ents.forEach(e=>{if(P.y<e.y)dp();
+    if(e.kind==='npc'){figure(L,e.x,e.y,NPC[e.id].look,NPC[e.id].col,t);const m=npcMark(e.id);if(m)txt(L,m,e.x,e.y-58+Math.sin(t*4)*3,34,m==='!'?'#b8541f':'#2f6fb0','center');txt(L,NPC[e.id].n.split(' ').slice(-1)[0],e.x,e.y+46,17,'#3a4060','center')}
+    else thing(L,e,t)});
+  dp();
+  if(nr){L.ctx.save();L.ctx.globalAlpha=.95;rect(L,nr.x-92,nr.y-82,184,26,'#f4f3e8');L.ctx.restore();fit(L,'E · '+label(nr),nr.x,nr.y-63,19,170,INK,'center')}
+  else if(inExit()){fit(L,'E · Turn the page',CW-120,CH-130,24,150,'#2a5a8a','center')}
+  const glow=inExit()?1:.5+.5*Math.sin(t*3);txt(L,'turn the page',CW-66,CH-44,20,`rgba(42,90,138,${.5+glow*.4})`,'center')}
+function look(L,e,x,y,s,t){const c=L.ctx,b=Math.sin(t*2+x)*3,k=s;c.save();c.translate(x+(e.shake>0?rnd(-5,5):0)+(e.lunge>0?-30:0),y+b);
+  const st={wolf(){ell(L,0,0,120*k,52*k,WASH.grey);ell(L,-66*k,-14*k,46*k,38*k,'#b7bcc4');pol(L,[[-80*k,-30*k],[-76*k,-52*k],[-66*k,-32*k]],'#8f949c');pol(L,[[-62*k,-32*k],[-52*k,-52*k],[-48*k,-28*k]],'#8f949c');
+      for(let i=0;i<4;i++)line(L,(-38+i*26)*k,18*k,(-42+i*26)*k,(52+(i%2)*3)*k,{strokeWidth:2.5});path(L,`M${55*k} -8 q${40*k} -${30*k} ${54*k} -${6*k}`,null,{strokeWidth:2.5});c.fillStyle=INK;c.fillRect(-78*k,-20*k,4,4);line(L,-86*k,-6*k,-78*k,0,{strokeWidth:1.5})},
+   cultist(){pol(L,[[-34*k,64*k],[0,-30*k],[34*k,64*k]],WASH.rose);ell(L,0,-34*k,34*k,34*k,'#3c2a3a');ell(L,0,-30*k,20*k,18*k,'#efe1c8');c.fillStyle=INK;c.fillRect(-7*k,-32*k,3,3);c.fillRect(5*k,-32*k,3,3);
+      const f=Math.sin(t*8)*4;pol(L,[[28*k,10*k],[36*k,-20*k-f],[44*k,10*k]],WASH.ochre)},
+   man(){pol(L,[[-24*k,64*k],[0,-18*k],[24*k,64*k]],'#8d93a6');ell(L,0,-34*k,30*k,30*k,'#efe1c8');line(L,26*k,10*k,34*k,-40*k,{strokeWidth:3});rect(L,24*k,-52*k,22*k,14*k,'#7f8597');c.fillStyle=INK;c.fillRect(-7*k,-36*k,3,3);c.fillRect(5*k,-36*k,3,3)},
+   ghost(){c.globalAlpha=.75;path(L,`M${-46*k} ${70*k} Q ${-60*k} ${-40*k} 0 ${-70*k} Q ${60*k} ${-40*k} ${46*k} ${70*k} l ${-18*k} ${-14*k} l ${-14*k} ${14*k} l ${-14*k} ${-14*k} Z`,'#d6e3ee');ell(L,-16*k,-18*k,14*k,20*k,INK);ell(L,16*k,-18*k,14*k,20*k,INK);c.globalAlpha=1},
+   weaver(){ell(L,0,0,80*k,64*k,'#5c4a7a');ell(L,-8*k,-40*k,48*k,40*k,'#7a68a0');for(let i=0;i<4;i++){const a=i*18-27;line(L,-30*k,a*k*.6,-100*k,(a*1.6-20+Math.sin(t*3+i)*6)*k,{strokeWidth:2.5});line(L,30*k,a*k*.6,100*k,(a*1.6-20+Math.sin(t*3+i+2)*6)*k,{strokeWidth:2.5})}
+      [-18,-6,6,18].forEach(x=>{c.fillStyle='#ffd36b';c.fillRect(x*k-12,-48*k,5,5)})},
+   knight(){rect(L,-34*k,-10*k,68*k,84*k,'#8d93a6');ell(L,0,-34*k,48*k,48*k,'#aab0c0');rect(L,-26*k,-38*k,52*k,10*k,'#2a2f3e');line(L,46*k,-30*k,46*k,84*k,{strokeWidth:5});line(L,30*k,0,62*k,0,{strokeWidth:4});
+      c.fillStyle=WASH.rose;c.fillRect(-4*k,-62*k,8*k,26*k)}};
+  (st[e.look]||st.man)();c.restore()}
+function intentIcon(L,it,x,y){if(it.t==='atk'){line(L,x-12,y+10,x+12,y-10,{strokeWidth:3});line(L,x-6,y+2,x-12,y+8,{strokeWidth:2});txt(L,String(it.v),x+30,y+8,26,'#b02a3c','center')}
+  else if(it.t==='def'){pol(L,[[x-11,y-10],[x+11,y-10],[x+11,y+2],[x,y+13],[x-11,y+2]],WASH.indigo);txt(L,String(it.v),x+30,y+8,26,'#3f6fa8','center')}
+  else if(it.t==='buff'){pol(L,[[x,y-12],[x+11,y+4],[x+4,y+4],[x+4,y+12],[x-4,y+12],[x-4,y+4],[x-11,y+4]],WASH.ochre);txt(L,'+'+it.v,x+30,y+8,24,'#a8661f','center')}
+  else{ell(L,x,y,24,24,'#d3c3e6');txt(L,'×',x,y+8,26,'#5a3a7a','center');txt(L,CARDS[it.c].n,x+44,y+8,18,'#5a3a7a','center')}}
+function bar(L,x,y,w,v,m,col){rect(L,x,y,w,12,'#efe9d6',{strokeWidth:1.3});if(v>0)rect(L,x+1,y+1,Math.max(3,(w-2)*v/m),10,col,{stroke:'rgba(0,0,0,0)'})}
+const TINT={atk:'#e3a3ae',skill:'#a7d0cb',power:'#ecd29b',curse:'#b9bbc7'};
+function drawCard(L,id,up,x,y,o){o=o||{};const w=112,h=156,c=L.ctx,cd=cv(id,up);c.save();c.translate(x,y);c.rotate(o.rot||0);c.scale(o.s||1,o.s||1);c.globalAlpha=o.alpha==null?1:o.alpha;
+  rect(L,-w/2,-h/2,w,h,'#f6f5ea',{strokeWidth:o.hl?3:1.7,stroke:o.hl?'#c0662a':INK});rect(L,-w/2+8,-h/2+32,w-16,54,TINT[cd.t],{strokeWidth:1.1});
+  const ix=0,iy=-h/2+59;
+  if(cd.t==='curse'){ell(L,ix,iy,28,28,'#8b8fa0');c.fillStyle=INK;c.fillRect(-7,iy-4,4,4);c.fillRect(4,iy-4,4,4)}
+  else if(cd.d){line(L,ix-14,iy+14,ix+14,iy-14,{strokeWidth:3});line(L,ix-8,iy+4,ix-14,iy+10,{strokeWidth:2.4});if(cd.burn)pol(L,[[ix+8,iy+14],[ix+14,iy-4],[ix+20,iy+14]],WASH.ochre,{strokeWidth:1})}
+  else if(cd.b){pol(L,[[ix-14,iy-14],[ix+14,iy-14],[ix+14,iy+2],[ix,iy+16],[ix-14,iy+2]],WASH.indigo)}
+  else if(cd.heal){line(L,ix-14,iy,ix+14,iy,{strokeWidth:4});line(L,ix,iy-14,ix,iy+14,{strokeWidth:4})}
+  else if(cd.str){pol(L,[[ix,iy-16],[ix+14,iy+4],[ix+5,iy+4],[ix+5,iy+16],[ix-5,iy+16],[ix-5,iy+4],[ix-14,iy+4]],WASH.ochre)}
+  else{rect(L,ix-12,iy-14,24,28,'#fff');rect(L,ix-4,iy-10,24,28,'#f3f3ea')}
+  ell(L,-w/2+14,-h/2+14,26,26,'#fff',{strokeWidth:1.6});txt(L,cd.c<0?'×':String(cd.c),-w/2+14,-h/2+22,22,INK,'center');
+  fit(L,cname(id,up),8,-h/2+24,18,w-48,INK,'center');
+  c.font='600 15px Caveat,cursive';c.fillStyle='#2a3048';c.textAlign='left';wrapLines(c,ctext(id,up),w-18).slice(0,5).forEach((l,i)=>c.fillText(l,-w/2+9,-h/2+108+i*16));
+  c.restore()}
+function drawCombatDyn(L,t){const n=C.foes.length;
+  C.foes.forEach((e,i)=>{const[x,y]=foePos(i,n,C.def.boss);if(e.dead){return}
+    if(i===C.target&&alive().length>1){ell(L,x,y+88,110,22,null,{stroke:'#c0662a',strokeWidth:2.4})}
+    look(L,e,x,y,C.def.boss?1.35:1,t);e.shake=Math.max(0,e.shake-1/60);e.lunge=Math.max(0,(e.lunge||0)-1/60);
+    fit(L,e.n,x,y-122,24,200,INK,'center');const it=intent(e);intentIcon(L,it,x-26,y-100+(C.def.boss?-14:0));
+    bar(L,x-60,y+104,120,e.hp,e.max,'#c7566a');txt(L,`${e.hp}/${e.max}`,x,y+134,18,INK,'center');
+    let s=[];if(e.block)s.push('block '+e.block);if(e.burn)s.push('burn '+e.burn);if(e.vuln)s.push('vulnerable '+e.vuln);if(e.str)s.push('str '+e.str);if(s.length)txt(L,s.join(' · '),x,y+154,16,'#4a5070','center')});
+  const px=170,py=330+(C.shakeP>0?rnd(-3,3):0);C.shakeP=Math.max(0,C.shakeP-1/60);drawPlayer(L,px,py,t,1,false);
+  bar(L,90,392,160,run.hp,run.max,'#d1697b');txt(L,`HP ${Math.max(0,run.hp)}/${run.max}`,170,422,20,INK,'center');
+  if(C.block)txt(L,'block '+C.block,170,444,18,'#3f6fa8','center');if(C.str)txt(L,'str +'+C.str,250,444,18,'#a8661f','center');
+  for(let i=0;i<3;i++)ell(L,66+i*30,150,24,24,i<C.energy?WASH.ochre:'#e6e2cf',{strokeWidth:1.6});txt(L,'ink',66,128,18,INK,'left');
+  txt(L,'Draw '+C.draw.length,52,CH-34,19,INK,'left');txt(L,'Discard '+C.disc.length,CW-52,CH-34,19,INK,'right');
+  fit(L,C.log,CW/2,92,22,700,'#3a4060','center');
+  rect(L,780,420,140,56,C.busy||C.over?'#d8d8ca':'#cfe6e2',{strokeWidth:2});txt(L,'End turn',850,457,26,INK,'center');
+  C.rects=[];const hn=C.hand.length,gap=Math.min(122,(CW-140)/Math.max(1,hn)),x0=CW/2-(hn-1)*gap/2,by=CH-84;let hv=-1;
+  for(let i=hn-1;i>=0;i--){const x=x0+i*gap;if(mouse.x>x-gap/2&&mouse.x<x+gap/2&&mouse.y>by-92){hv=i;break}}C.hover=hv;
+  C.hand.forEach((cd,i)=>{if(i===hv)return;const c=cv(cd.id,cd.up);const x=x0+i*gap;drawCard(L,cd.id,cd.up,x,by+Math.abs(i-(hn-1)/2)*2,{rot:(i-(hn-1)/2)*.025,alpha:c.c>C.energy||c.c<0?.62:1});C.rects.push({i,x:x-gap/2,y:by-78,w:gap,h:156})});
+  if(hv>=0){const cd=C.hand[hv],x=x0+hv*gap;drawCard(L,cd.id,cd.up,x,by-48,{s:1.25,hl:true});C.rects.push({i:hv,x:x-70,y:by-48-98,w:140,h:196})}
+  fx=fx.filter(f=>(f.t+=1/60)<1.1);fx.forEach(f=>txt(L,f.s,f.x,f.y-f.t*40,26,f.col,'center'));
+  if(run.hp<=0)return;}
+function drawDyn(t){const L=L1;
+  if(G.mode==='rpg'&&scene)drawRpgDyn(L,t);else if(G.mode==='combat'&&C)drawCombatDyn(L,t)}
+
+let lastSeed=-1,lastMode='';
+function renderAll(force){const now=performance.now(),ns=1+Math.floor(now/170)%9999;SEED=ns;
+  if(force||ns!==lastSeed||G.mode!==lastMode){lastSeed=ns;lastMode=G.mode;sc=0;drawStatic();tex0.baseTexture.update()}
+  const c=L1.ctx;c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,L1.cv.width,L1.cv.height);c.setTransform(S,0,0,S,0,0);c.globalAlpha=1;sc=0;
+  if(run)drawDyn(now/1000);tex1.baseTexture.update()}
+
+/* ================= loop ================= */
+app.ticker.add(()=>{const dt=Math.min(.05,app.ticker.deltaMS/1000);if(G.mode==='rpg'&&scene&&run)updateRpg(dt);if(!G.busy)renderAll(false)});
+document.fonts&&document.fonts.load('20px Caveat').then(()=>document.fonts.load('20px "IM Fell English SC"')).catch(()=>{}).then(()=>{renderAll(true);title()});
+if(!document.fonts)title();
+</script>
