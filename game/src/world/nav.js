@@ -6,6 +6,7 @@
 // Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {STATIONS, SPAWN} from '../core/contracts.js'
+import {SITES} from '../core/rules/path.js'
 
 export const WALK_SPEED = 6
 export const PLAYER_RADIUS = 0.45
@@ -91,6 +92,18 @@ export function buildColliders() {
 	for (const [x, z] of LAYOUT.houses) box(x, z, 2.15, 1.85, Math.atan2(-x, -z), 'house')
 	// Gate pillars (also covered by BOUNDS.minZ, kept for completeness).
 	for (const s of [-1, 1]) circle(s * 2.3, -25, 0.7, 'gate')
+	// v2 sites (world/sites.js places these props): cart, Wayfarer, Keeper's stool and lamp,
+	// the Road Fire. Fight rings are walkable ash.
+	{
+		const [cx, cz] = SITES.cart.pos
+		box(cx - 1.4, cz - 1.2, 1.25, 0.85, 0.3, 'cart')
+		circle(cx + 0.6, cz + 0.6, 0.35, 'npc')
+		const [bx, bz] = SITES.bench.pos
+		circle(bx, bz - 0.6, 0.4, 'npc')
+		circle(bx + 1.1, bz - 1.0, 0.22, 'lantern')
+		const [fx, fz] = SITES.roadfire.pos
+		circle(fx, fz, 0.85, 'fire')
+	}
 	return out
 }
 

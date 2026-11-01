@@ -1,0 +1,65 @@
+{
+	"v": 1,
+	"edition": 1,
+	"updated": "2026-10-31",
+	"files": [
+		{
+			"path": "presets/forge-banked-hammer-ab34891f.json",
+			"type": "preset",
+			"hash": "30370521b74e1f97",
+			"bytes": 903,
+			"since": 1
+		},
+		{
+			"path": "presets/well-wildflowers-49ed9c08.json",
+			"type": "preset",
+			"hash": "e063479d56df30ad",
+			"bytes": 241,
+			"since": 1
+		},
+		{
+			"path": "presets/briar-page-names-136e5ee7.json",
+			"type": "preset",
+			"hash": "9e047ffdc31f66a2",
+			"bytes": 334,
+			"since": 1
+		},
+		{
+			"path": "presets/ash-gate-cairn-f46ccd61.json",
+			"type": "preset",
+			"hash": "ae752ad16048725a",
+			"bytes": 292,
+			"since": 1
+		},
+		{
+			"path": "presets/lantern-road-fire-5732e3a7.json",
+			"type": "preset",
+			"hash": "f00b2f6673a0bbcd",
+			"bytes": 360,
+			"since": 1
+		},
+		{
+			"path": "presets/crow-even-birds-194f027e.json",
+			"type": "preset",
+			"hash": "273a7d3ee276a134",
+			"bytes": 324,
+			"since": 1
+		},
+		{
+			"path": "presets/oath-bellringer-593f9318.json",
+			"type": "preset",
+			"hash": "9bcc2f14813cda42",
+			"bytes": 550,
+			"since": 1
+		},
+		{
+			"path": "presets/bargain-lucky-coin-972817d0.json",
+			"type": "preset",
+			"hash": "e7a3be65258af778",
+			"bytes": 609,
+			"since": 1
+		}
+	],
+	"names": [],
+	"ledger": []
+}

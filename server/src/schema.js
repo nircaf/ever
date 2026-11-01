@@ -26,6 +26,30 @@ const OPTION_ID = /^[A-Za-z0-9_.:-]{1,32}$/
 const TYPE_ID = /^[a-z]{2,16}(\.[A-Za-z]{2,20})?$/
 
 const str = (x, max) => typeof x === 'string' && x.length > 0 && x.length <= max
+const int = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi
+const SEED = /^[BCDFGHJKLMNPQRSTVWXZ2-9]{8}$/
+/** v2 actions the room runs only by itself (fight results); never accepted from a client. */
+const INTERNAL_V2 = new Set(['fight.result', 'fight.begin', 'fight.cancel', 'book.unfinished'])
+/** Largest generated-offer definition a client may send (the mechanics validator caps it again). */
+const DEF_MAX = 3000
+
+/** A plain JSON copy of an AI offer object, or null (size-capped, no prototype keys). */
+function cleanDef(def) {
+	if (!def || typeof def !== 'object' || Array.isArray(def)) return null
+	let text
+	try {
+		text = JSON.stringify(def)
+	} catch {
+		return null
+	}
+	if (typeof text !== 'string' || text.length > DEF_MAX) return null
+	try {
+		return JSON.parse(text, (k, v) => (k === '__proto__' || k === 'constructor' || k === 'prototype' ? undefined : v))
+	} catch {
+		return null
+	}
+}
+const withPage = (a, out) => (int(a.page, 0, 30) ? {...out, page: a.page} : out)
 
 /**
  * Rebuild a BookAction from untrusted input. Returns null if it is not acceptable.
@@ -37,14 +61,59 @@ const str = (x, max) => typeof x === 'string' && x.length > 0 && x.length <= max
 export function cleanBookAction(a) {
 	if (!a || typeof a !== 'object' || Array.isArray(a) || typeof a.type !== 'string') return null
 	const type = a.type
-	if (!TYPE_ID.test(type) || type === 'marcus.friendStruck') return null
+	if (!TYPE_ID.test(type) || type === 'marcus.friendStruck' || INTERNAL_V2.has(type)) return null
 	switch (type) {
+		// ---- v2 (GDD_V2): seeded rooms, pages, offers. The rules re-check everything. ----
+		case 'room.seed':
+			return SEED.test(a.seed ?? '') ? {type, seed: a.seed, ...(int(a.edition, 0, 999_999) ? {edition: a.edition} : {})} : null
+		case 'offer.take': {
+			if (!int(a.slot, 0, 3)) return null
+			const out = withPage(a, {type, slot: a.slot})
+			if (a.swap === true) out.swap = true
+			if (a.def !== undefined) {
+				const def = cleanDef(a.def)
+				if (!def) return null
+				out.def = def
+			}
+			return out
+		}
+		case 'spoils.take':
+			return int(a.slot, 0, 7) ? {type, slot: a.slot, ...(a.swap === true ? {swap: true} : {})} : null
+		case 'spoils.leave':
+			return {type}
+		case 'offer.decline':
+		case 'page.skip':
+		case 'moment.talk':
+		case 'hearth.rest':
+			return withPage(a, {type})
+		case 'moment.option':
+			return str(a.option, 32) && OPTION_ID.test(a.option) ? withPage(a, {type, option: a.option}) : null
+		case 'moment.free': {
+			if (typeof a.text !== 'string' || a.text.length > FREE_TEXT_MAX) return null
+			const text = a.text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim()
+			return text ? withPage(a, {type, text}) : null
+		}
+		case 'grind.upgrade':
+		case 'hearth.burn':
+		case 'hearth.remove':
+			return str(a.uid, 8) && UID.test(a.uid) ? withPage(a, {type, uid: a.uid}) : null
+		case 'hearth.temper': {
+			if (!(str(a.uid, 8) && UID.test(a.uid))) return null
+			const out = withPage(a, {type, uid: a.uid})
+			if (a.uid2 !== undefined) {
+				if (!(str(a.uid2, 8) && UID.test(a.uid2))) return null
+				out.uid2 = a.uid2
+			}
+			return out
+		}
 		case 'visit':
 			return Object.hasOwn(STATIONS, a.place) ? {type, place: a.place} : null
 		case 'well.remove':
 		case 'anvil.upgrade':
-			return str(a.uid, 8) && UID.test(a.uid) ? {type, uid: a.uid} : null
+			return str(a.uid, 8) && UID.test(a.uid) ? withPage(a, {type, uid: a.uid}) : null
 		case 'lectern.take':
+			// v2: a slot of the generated offer; MVP: an engine card id
+			if (int(a.slot, 0, 5)) return withPage(a, {type, slot: a.slot})
 			return str(a.id, 32) && CARD_ID.test(a.id) ? {type, id: a.id} : null
 		case 'marcus.option':
 			return str(a.option, 32) && OPTION_ID.test(a.option) ? {type, option: a.option} : null
@@ -62,9 +131,10 @@ export function cleanBookAction(a) {
 			return out
 		}
 		case 'well.ward':
-		case 'lectern.leave':
 		case 'grindstone.take':
 		case 'shrine.take':
+			return withPage(a, {type})
+		case 'lectern.leave':
 		case 'marcus.talk':
 			return {type}
 		default: {

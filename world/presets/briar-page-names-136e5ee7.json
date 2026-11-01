@@ -1,0 +1,24 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "briar-page-names",
+	"themes": [
+		"briar"
+	],
+	"proposal": {
+		"kind": "path",
+		"data": {
+			"theme": "briar",
+			"titles": [
+				"The Wood Leans in",
+				"Roots Under the Road",
+				"Thorn and Thread",
+				"The Green Gate"
+			]
+		}
+	}
+}

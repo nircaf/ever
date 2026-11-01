@@ -1,0 +1,6 @@
+# EVER code owners (docs/PLATFORM.md 4). With "Require review from Code Owners" on, every
+# change outside the world-bot allowlist needs the owner's review; world data and sandboxed
+# code blocks have no owner, so bot PRs can auto-merge on a green "ever-check".
+*                              @nircaf
+/world/
+/game/src/mechanics/blocks/

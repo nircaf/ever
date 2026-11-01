@@ -1,0 +1,81 @@
+# EVER: the check every pull request must pass (required status check "ever-check").
+# Bot PRs (world changes from finished runs) auto-merge when it is green: see world-auto-merge.yml
+# and docs/PLATFORM.md 4. No secrets here; the token is read-only.
+# Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+name: ever-check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ever-check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ever-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # No install scripts: a PR must not run code before the static checks below.
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Bot or human
+        id: who
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BOT: ${{ vars.EVER_BOT_LOGIN }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if { [ -n "$BOT" ] && [ "$AUTHOR" = "$BOT" ]; } || [ "${HEAD_REF#world/}" != "$HEAD_REF" ]; then
+            echo "flag=--bot" >> "$GITHUB_OUTPUT"; echo "Bot PR rules apply."
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"; echo "Human PR."
+          fi
+
+      - name: Path allowlist and size limits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node game/src/platform/tools/pr-guard.mjs --base "$BASE" --head "$HEAD" ${{ steps.who.outputs.flag }}
+
+      - name: Code-block sandbox (static)
+        run: node game/src/mechanics/tools/check-blocks.mjs
+
+      - name: World schema, hashes and full balance sim on changed files
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            node game/src/platform/tools/check-world.mjs --base "$BASE" --fights 200 ${{ steps.who.outputs.flag }}
+          else
+            node game/src/platform/tools/check-world.mjs --sim-all --fights 200
+          fi
+
+      - name: Tests (unit + bridge smoke)
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle size (first load budget, gzip)
+        run: node game/src/platform/tools/bundle-report.mjs public --budget-kb 300

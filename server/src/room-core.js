@@ -26,6 +26,13 @@ import {
 	spendTokensForCombat,
 } from '../../game/src/core/contracts.js'
 import {RATE, checkMove, cleanClientMsg, createBucket} from './schema.js'
+// v2 seeded books (GDD_V2 17): one seed per room, shared page progress, fights at rings.
+// The rules (core/rules/run.js through applyBookAction) re-validate every offer a client
+// sends with the same mechanics validator and balance sim the client used.
+import {CATCH_UP_HP, currentPage, isV2, newBookV2, siteOf} from '../../game/src/core/rules/run.js'
+import {inSiteRange, isFight} from '../../game/src/core/rules/path.js'
+import {isSeedCode} from '../../game/src/core/rules/seed.js'
+import {WORLD_EDITION_FALLBACK} from '../../game/src/core/contracts.js'
 
 /** Seconds a socket may stay open without sending hello. */
 export const HELLO_TIMEOUT_MS = 10_000
@@ -102,6 +109,9 @@ export class RoomCore {
 		this.fight = saved?.fight ?? null // {seats: number[], round, startedAt}
 		this.emptySince = saved?.emptySince ?? null
 		this.closed = Boolean(saved?.closed)
+		/** v2: the room's seed code (null = MVP room) and world edition. */
+		this.seed = saved?.seed ?? null
+		this.edition = saved?.edition ?? WORLD_EDITION_FALLBACK
 		// runtime only
 		/** @type {Map<string, {openedAt: number, bucket: ReturnType<typeof createBucket>, strikes: number, bad: number, lastRateErr: number, seat: number|null}>} */
 		this.conns = new Map()
@@ -135,7 +145,47 @@ export class RoomCore {
 			fight: this.fight,
 			emptySince: this.emptySince,
 			closed: this.closed,
+			seed: this.seed,
+			edition: this.edition,
 		}
+	}
+
+	// ---------------------------------------------------------------- v2 (seeded rooms)
+
+	get v2() {
+		return Boolean(this.seed)
+	}
+
+	/** The party's shared page: the lowest page of every connected living reader (GDD_V2 17.2). */
+	sharedPage() {
+		const pages = this.connectedSeats()
+			.filter((s) => isV2(s.book) && (s.book.status === 'exploring' || s.book.status === 'fighting'))
+			.map((s) => s.book.page)
+		return pages.length ? Math.min(...pages) : 0
+	}
+
+	/** A v2 book for a seat; mid-book joiners and the fallen start at the shared page (17.5). */
+	bookV2For(seat, booksWritten, {page = this.sharedPage()} = {}) {
+		const now = this.io.now()
+		const catchUp = Math.floor(page / 2)
+		return newBookV2({meta: {booksWritten, rememberedLine: ''}, seed: this.seed, seat, edition: this.edition, now, startPage: page, catchUp, ...(page > 0 ? {hp: CATCH_UP_HP} : {})})
+	}
+
+	/** room.seed: the host picks the room's seed (first page only); every seat gets that book. */
+	onRoomSeed(me, m) {
+		const seed = m.a.seed
+		const started = this.livingSeats().some((s) => isV2(s.book) ? s.book.page > 0 || s.book.deck.length > 1 : s.book.status !== 'exploring')
+		if (!isSeedCode(seed) || this.phase !== 'village' || (this.v2 && started)) return this.send(me, MSG.ERROR, {code: 'not_allowed', ref: m.ref})
+		this.seed = seed
+		const ed = Number(m.a.edition)
+		this.edition = Number.isInteger(ed) && ed >= 0 && ed < 1e6 ? ed : this.edition
+		for (const s of this.livingSeats()) {
+			s.book = this.bookV2For(s.seat, s.book.booksWritten, {page: 0})
+			s.ready = false
+			this.send(s, MSG.BOOK, s === me ? {ref: m.ref, book: s.book, fx: []} : {book: s.book, fx: []})
+		}
+		this.dirty = true
+		this.broadcastRoom()
 	}
 
 	/**
@@ -245,7 +295,7 @@ export class RoomCore {
 				seatToken: this.io.token(),
 				cid: null,
 				droppedAt: null,
-				book: newBook({meta: {booksWritten: bw, rememberedLine: ''}, now}),
+				book: this.v2 ? this.bookV2For(idx, bw) : newBook({meta: {booksWritten: bw, rememberedLine: ''}, now}),
 				pos: [SPAWN[0], SPAWN[1], 0],
 				walking: 0,
 				moveBudget: 0,
@@ -373,7 +423,7 @@ export class RoomCore {
 			if (Math.hypot(dx, dz) > 1) this.send(me, MSG.PEERS, {m: [], fix: [r2(r.pos[0]), r2(r.pos[1])]})
 		}
 		if (me.talking && !inStationRange('marcus', me.pos[0], me.pos[1], 1 + TALK_SLACK)) this.setTalking(me, false)
-		if (me.ready && !inStationRange('gate', me.pos[0], me.pos[1])) {
+		if (me.ready && !(this.v2 && isV2(me.book) ? inSiteRange(siteOf(me.book), me.pos[0], me.pos[1]) : inStationRange('gate', me.pos[0], me.pos[1]))) {
 			me.ready = false
 			this.recomputeLobby(now)
 			this.broadcastRoom()
@@ -400,10 +450,13 @@ export class RoomCore {
 	}
 
 	ctxFor(s, now) {
-		return {pos: /** @type {[number, number]} */ ([s.pos[0], s.pos[1]]), now, coop: true, friendStruck: this.struck && !s.book.marcus?.flags?.struck}
+		const ctx = {pos: /** @type {[number, number]} */ ([s.pos[0], s.pos[1]]), now, coop: true, friendStruck: this.struck && !s.book.marcus?.flags?.struck}
+		if (this.v2 && isV2(s.book)) ctx.maxPage = this.sharedPage()
+		return ctx
 	}
 
 	onAct(me, m, now) {
+		if (m.a.type === 'room.seed') return this.onRoomSeed(me, m)
 		if (me.inFight || me.book.status === 'fighting') return this.send(me, MSG.ERROR, {code: 'not_allowed', ref: m.ref})
 		const before = me.book
 		let r
@@ -413,13 +466,14 @@ export class RoomCore {
 			console.error('[room] applyBookAction', err)
 			return this.send(me, MSG.ERROR, {code: 'server', ref: m.ref})
 		}
-		if (!r || !r.ok) return this.send(me, MSG.ERROR, {code: r?.error === 'too_far' ? 'too_far' : 'not_allowed', ref: m.ref})
+		if (!r || !r.ok) return this.send(me, MSG.ERROR, {code: r?.error === 'too_far' ? 'too_far' : 'not_allowed', ...(this.v2 && r?.error ? {why: String(r.error).slice(0, 24)} : {}), ref: m.ref})
+		const pageBefore = this.v2 ? this.sharedPage() : 0
 		me.book = r.book
 		this.dirty = true
 		const fx = Array.isArray(r.effects) ? r.effects : []
 		this.send(me, MSG.BOOK, {ref: m.ref, book: me.book, fx})
 		if (m.a.type === 'marcus.talk' || m.a.type === 'marcus.option' || m.a.type === 'marcus.free') this.setTalking(me, !fx.some((e) => e.k === 'close'))
-		if (me.book.hp !== before.hp || me.book.bookNo !== before.bookNo) this.broadcastRoom()
+		if (me.book.hp !== before.hp || me.book.bookNo !== before.bookNo || (this.v2 && (me.book.page !== before.page || this.sharedPage() !== pageBefore))) this.broadcastRoom()
 		// GDD 7.2 shared memory: someone struck Marcus -> every other player's trust drops once.
 		if (!before.marcus?.flags?.struck && me.book.marcus?.flags?.struck && !this.struck) this.onStruck(me, now)
 	}
@@ -461,7 +515,12 @@ export class RoomCore {
 			return
 		}
 		if (this.phase !== 'village' || me.inFight || me.book.status !== 'exploring') return this.send(me, MSG.ERROR, {code: 'not_allowed'})
-		if (!inStationRange('gate', me.pos[0], me.pos[1])) return this.send(me, MSG.ERROR, {code: 'too_far'})
+		if (this.v2 && isV2(me.book)) {
+			// v2: the lobby is at the current fight page's ring (or the gate), for readers on that page.
+			const cur = currentPage(me.book)
+			if (!cur || !isFight(cur.type) || me.book.pend || me.book.page !== this.sharedPage()) return this.send(me, MSG.ERROR, {code: 'not_allowed'})
+			if (!inSiteRange(siteOf(me.book), me.pos[0], me.pos[1])) return this.send(me, MSG.ERROR, {code: 'too_far'})
+		} else if (!inStationRange('gate', me.pos[0], me.pos[1])) return this.send(me, MSG.ERROR, {code: 'too_far'})
 		me.ready = true
 		this.recomputeLobby(now)
 		this.broadcastRoom()
@@ -487,7 +546,7 @@ export class RoomCore {
 	// ---------------------------------------------------------------- combat (GDD 7.3)
 
 	startFight(now) {
-		const fs = this.connectedSeats().filter((s) => s.ready && !s.inFight && s.book.status === 'exploring')
+		const fs = this.connectedSeats().filter((s) => s.ready && !s.inFight && s.book.status === 'exploring' && (!this.v2 || (isV2(s.book) && s.book.page === this.sharedPage())))
 		this.lobbyStartsAt = null
 		if (!fs.length) return
 		const prior = new Map(fs.map((s) => [s.seat, s.book]))
@@ -498,7 +557,8 @@ export class RoomCore {
 			return {seat: s.seat, name: s.name, book: s.book, tokens: spent, spent}
 		})
 		try {
-			this.pc = this.rules.createPartyCombat({fighters, enemyId: ENEMY_ID, seed: Math.floor((this.io.random?.() ?? Math.random()) * 2 ** 32), now})
+			const enemyId = this.v2 && isV2(fs[0].book) ? currentPage(fs[0].book)?.enemy ?? ENEMY_ID : ENEMY_ID
+			this.pc = this.rules.createPartyCombat({fighters, enemyId, seed: Math.floor((this.io.random?.() ?? Math.random()) * 2 ** 32), now})
 		} catch (err) {
 			console.error('[room] createPartyCombat', err)
 			for (const s of fs) {
@@ -635,7 +695,7 @@ export class RoomCore {
 	/** @param {SeatState} s */
 	newBookFor(s, fx = []) {
 		const now = this.io.now()
-		s.book = newBook({meta: {booksWritten: s.book.booksWritten + 1, rememberedLine: ''}, now})
+		s.book = this.v2 ? this.bookV2For(s.seat, s.book.booksWritten + 1) : newBook({meta: {booksWritten: s.book.booksWritten + 1, rememberedLine: ''}, now})
 		s.pos = [SPAWN[0], SPAWN[1], 0]
 		s.moveBudget = 0
 		s.lastMoveAt = now
@@ -648,8 +708,40 @@ export class RoomCore {
 		this.io.scheduleMoves?.()
 	}
 
+	/** v2 after a won chapter: everyone starts the room's new seed at page one. */
+	newBookForPage0(s) {
+		s.book = this.bookV2For(s.seat, s.book.booksWritten + 1, {page: 0})
+		s.pos = [SPAWN[0], SPAWN[1], 0]
+		s.ready = false
+		s.vote = false
+		s.talking = false
+		this.send(s, MSG.BOOK, {book: s.book, fx: []})
+		this.send(s, MSG.PEERS, {m: [], fix: [SPAWN[0], SPAWN[1]]})
+	}
+
 	endFight(o) {
 		const fought = this.fight?.seats ?? []
+		const finalPage = this.v2 && fought.some((i) => currentPage(this.seats[i]?.book ?? {})?.type === 'final')
+		if (o.won && this.v2 && !finalPage) {
+			// v2 skirmish / elite: each fighter's book turns the page and gets Spoils (room-internal action).
+			this.phase = 'village'
+			for (const s of this.livingSeats()) {
+				if (!s.inFight || !fought.includes(s.seat)) continue
+				const res = o.bySeat?.[s.seat]
+				const hpLeft = Math.max(1, Math.min(s.book.maxHp, Math.round(res?.hpLeft ?? s.book.hp)))
+				const r = this.rules.applyBookAction(s.book, {type: 'fight.result', won: true, hp: hpLeft, turns: o.rounds ?? 0}, {...this.ctxFor(s, this.io.now()), internal: true})
+				if (r?.ok) s.book = r.book
+				s.inFight = false
+				s.ready = false
+				this.send(s, MSG.DONE, {won: true, hpLeft, turns: o.rounds ?? 0, dead: false})
+				this.send(s, MSG.BOOK, {book: s.book, fx: r?.effects ?? []})
+			}
+			this.pc = null
+			this.fight = null
+			this.dirty = true
+			this.broadcastRoom()
+			return
+		}
 		if (o.won) {
 			this.phase = 'epilogue'
 			for (const s of this.livingSeats()) {
@@ -701,7 +793,8 @@ export class RoomCore {
 		if (!c.length || !c.every((s) => s.vote)) return false
 		this.phase = 'village'
 		this.struck = false
-		for (const s of this.livingSeats()) this.newBookFor(s)
+		if (this.v2) this.seed = randomSeedCode(this.io.random)
+		for (const s of this.livingSeats()) this.v2 ? this.newBookForPage0(s) : this.newBookFor(s)
 		this.dirty = true
 		this.broadcastRoom()
 		return true
@@ -764,6 +857,7 @@ export class RoomCore {
 			struck: this.struck,
 			lobby: {ready, of, startsAt: this.lobbyStartsAt},
 			votes: {newBook: this.livingSeats().filter((s) => s.vote).map((s) => s.seat)},
+			...(this.v2 ? {seed: this.seed, edition: this.edition, page: this.sharedPage(), of: this.livingSeats().find((s) => isV2(s.book))?.book.path.L ?? 0} : {}),
 		}
 	}
 
@@ -780,6 +874,13 @@ export class RoomCore {
 }
 
 const r2 = (v) => Math.round(v * 100) / 100
+
+const SEED_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ23456789'
+function randomSeedCode(random = Math.random) {
+	let out = ''
+	for (let i = 0; i < 8; i++) out += SEED_ALPHABET[Math.floor((random?.() ?? Math.random()) * SEED_ALPHABET.length) % SEED_ALPHABET.length]
+	return out
+}
 
 function refOf(raw) {
 	if (typeof raw !== 'string' || raw.length > 4096) return undefined

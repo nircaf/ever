@@ -8,11 +8,14 @@ import {COPY} from '../copy.js'
 import {marcusPanel} from '../rules/book.js'
 import {btn, h, isolateKeys} from './dom.js'
 import {cardEl, groupDeck} from './cards.js'
+import {COPY2} from '../copy-v2.js'
+
+const COPY2_PLACEHOLDER = COPY2.moment.placeholder
 
 /**
- * @param {{root: HTMLElement, store: ReturnType<typeof import('../book-store.js').createBookStore>, ai: ReturnType<typeof import('../ai.js').createAiController>, toast: (t: string, kind?: string) => void}} deps
+ * @param {{root: HTMLElement, store: ReturnType<typeof import('../book-store.js').createBookStore>, ai: ReturnType<typeof import('../ai/index.js').createAiController>, toast: (t: string, kind?: string) => void}} deps
  */
-export function createPanels({root, store, ai, toast}) {
+export function createPanels({root, store, ai, toast, hooks = {}}) {
 	/** @type {{el: HTMLElement, station: string|null, onClose?: () => void, keys?: (e: KeyboardEvent) => void, kind: string}|null} */
 	let cur = null
 
@@ -206,6 +209,7 @@ export function createPanels({root, store, ai, toast}) {
 				else if (e.k === 'options') s.options = e.options
 				else if (e.k === 'close') s.closed = true
 				else if (e.k === 'picker' && e.purpose === 'anvil') s.mode = 'anvil'
+				else if (e.k === 'offer') s.offer = true // v2: Marcus opens the Offer panel (GDD_V2 10.2)
 			}
 			// Marcus's words first, then the game's outcome lines ("Marcus trusts you more.", "(-6 HP)")
 			if (lines.length) s.lines = [...lines.filter((l) => !l.out), ...lines.filter((l) => l.out)]
@@ -215,6 +219,11 @@ export function createPanels({root, store, ai, toast}) {
 			}
 			if (s.closed) s.options = []
 			render()
+			if (s.offer) {
+				s.offer = false
+				const last = s.lines.filter((l) => !l.out).at(-1)?.text ?? ''
+				queueMicrotask(() => hooks.onOffer?.({who: 'marcus', name: 'Marcus', reply: last}))
+			}
 		}
 
 		async function run(action) {
@@ -260,7 +269,7 @@ export function createPanels({root, store, ai, toast}) {
 		}
 
 		function renderFree() {
-			const input = isolateKeys(h('input', {class: 'ever-input', type: 'text', maxlength: FREE_TEXT_MAX, placeholder: COPY.free.placeholder, 'aria-label': COPY.free.open, autocomplete: 'off'}))
+			const input = isolateKeys(h('input', {class: 'ever-input', type: 'text', maxlength: FREE_TEXT_MAX, placeholder: store.get().v === 2 ? COPY2_PLACEHOLDER : COPY.free.placeholder, 'aria-label': COPY.free.open, autocomplete: 'off'}))
 			const go = async () => {
 				const text = input.value.trim()
 				if (!text || s.busy) return
@@ -425,6 +434,11 @@ export function createPanels({root, store, ai, toast}) {
 
 	return {
 		close,
+		/** v2 panels (core/ui/run-panels.js) share this one panel slot. */
+		mount,
+		modal,
+		flash,
+		hooks,
 		openDeck,
 		openGateSolo,
 		openGateCoop,

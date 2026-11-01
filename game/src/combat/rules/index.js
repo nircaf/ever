@@ -41,6 +41,11 @@ import {MonsterRoom, StartRoom} from '../../../../vendor/slaytheweb/src/game/roo
 import {produce} from 'immer'
 import doubt, {upgrade as doubtUpgrade} from './content/doubt.js'
 import {WARDEN_HP_BY_PARTY, TURN_TIMER_MS, CURSE_ID, seededRandom} from '../../core/contracts.js'
+// Generated content (cards, items, curses, tokens) from the mechanics engine. The hooks
+// below are its ONLY entry points into combat; see docs/MECHANICS.md section 5.
+import {compileDeckCard} from '../../mechanics/compile.js'
+import {isGeneratedId} from '../../mechanics/schema.js'
+import * as mech from '../../mechanics/engine.js'
 
 /** Bump when the PartyCombat shape changes (the room may persist it). */
 export const COMBAT_VERSION = 1
@@ -64,6 +69,7 @@ export function ensureEngine() {
 		cardUpgrades[doubt.name] = doubtUpgrade
 	}
 	allConditions.unplayable = () => false
+	mech.installEngineExtensions() // registers the 'everOps' engine action (generated cards)
 
 	// Upstream quirk: upgrade fns that mutate their input. Restore the bases ...
 	const pommel = cards.find((c) => c.name === 'Pommel Strike')
@@ -101,10 +107,40 @@ export const ENEMIES = Object.freeze({
 		]),
 		intentNames: Object.freeze(['Cleave', 'Brace', 'Smother', 'Ember Slam']),
 	}),
+	// v2 path enemies (GDD_V2 7, 13; party HP x1 / x2.2 / x3.3 / x4.4, Warden 17.6). Added by
+	// the world + systems engineer so seeded books can be played end to end; Combat owns
+	// tuning, the Warden aspects/twists and Marks (docs/TECH.md 10).
+	ashMotes: Object.freeze({
+		name: 'Ash Motes',
+		hpByParty: Object.freeze([16, 35, 53, 70]),
+		intents: Object.freeze([Object.freeze({damage: 4}), Object.freeze({damage: 6}), Object.freeze({damage: 3, weak: 1})]),
+		intentNames: Object.freeze(['Flick', 'Flick', 'Smoulder']),
+	}),
+	cinderHound: Object.freeze({
+		name: 'Cinder Hound',
+		hpByParty: Object.freeze([32, 70, 106, 141]),
+		intents: Object.freeze([Object.freeze({damage: 7}), Object.freeze({damage: 5, vulnerable: 1}), Object.freeze({damage: 10})]),
+		intentNames: Object.freeze(['Bite', 'Snarl', 'Lunge']),
+	}),
+	ironHusk: Object.freeze({
+		name: 'The Iron Husk',
+		hpByParty: Object.freeze([52, 114, 172, 229]),
+		intents: Object.freeze([Object.freeze({damage: 7, block: 8}), Object.freeze({damage: 13}), Object.freeze({damage: 6, weak: 1, vulnerable: 1}), Object.freeze({damage: 16})]),
+		intentNames: Object.freeze(['Guard', 'Rake', 'Rust', 'Crush']),
+	}),
+	wardenV2: Object.freeze({
+		name: 'The Ash Warden',
+		hpByParty: Object.freeze([120, 270, 410, 545]),
+		intents: Object.freeze([Object.freeze({damage: 14}), Object.freeze({damage: 9, block: 12}), Object.freeze({damage: 7, weak: 1}), Object.freeze({damage: 23})]),
+		intentNames: Object.freeze(['Cleave', 'Brace', 'Smother', 'Ember Slam']),
+	}),
 })
 
+/** Number of intents in an enemy's fixed cycle (4 for the Warden). */
+const cycleOf = (enemyId) => ENEMIES[enemyId]?.intents.length ?? 4
+
 /** Intent step (1..4) for fighter k (0-based, seat order) in a round (1-based). GDD 7.3. */
-export const intentStep = (round, k) => ((round - 1 + k) % 4) + 1
+export const intentStep = (round, k, cycle = 4) => ((round - 1 + k) % cycle) + 1
 
 /**
  * GDD 6 intent label: "Cleave 12" / "Brace 8, Block 10" / "Smother 6, Weak" / "Ember Slam 20".
@@ -112,15 +148,28 @@ export const intentStep = (round, k) => ((round - 1 + k) % 4) + 1
  * @param {string} [enemyId]
  */
 export function intentLabel(intent, enemyId = 'ashWarden') {
-	const e = ENEMIES[enemyId]
+	const e = ENEMIES[enemyId] ?? ENEMIES.ashWarden
 	const name = e.intentNames[intent.step - 1]
-	if (intent.step === 2) return `${name} ${intent.damage}, Block ${intent.block}`
-	if (intent.step === 3) return `${name} ${intent.damage}, Weak`
-	return `${name} ${intent.damage}`
+	if (enemyId === 'ashWarden') {
+		if (intent.step === 2) return `${name} ${intent.damage}, Block ${intent.block}`
+		if (intent.step === 3) return `${name} ${intent.damage}, Weak`
+		return `${name} ${intent.damage}`
+	}
+	// v2 enemies: built from the intent's own fields (same wording as the Warden's).
+	const parts = [`${name} ${intent.damage}`]
+	if (intent.block) parts.push(`Block ${intent.block}`)
+	if (intent.weak) parts.push('Weak')
+	if (intent.vulnerable) parts.push('Vulnerable')
+	return parts.join(', ')
 }
 
-/** Engine card for a book DeckCard ({uid, id, upgraded}); its instance id is the book uid. */
-export function engineCard(deckCard) {
+/**
+ * Engine card for a book DeckCard ({uid, id, upgraded}); its instance id is the book uid.
+ * Generated cards (`id: 'g:...'`, or an inline `def`) are compiled from `content`.
+ */
+export function engineCard(deckCard, content) {
+	const gen = compileDeckCard(deckCard, content)
+	if (gen) return gen
 	const c = plain(createCard(deckCard.id, deckCard.upgraded))
 	delete c.image
 	if (deckCard.uid) c.id = deckCard.uid
@@ -163,9 +212,9 @@ function shuffleWith(arr, rand) {
  * 50 max HP from the book and 5 cards drawn. (Kept for tests/tools; party combat stores
  * a slimmer state and attaches the shared Warden only while the engine runs.)
  */
-export function createFighterState(book, monster, rand) {
+export function createFighterState(book, monster, rand, content) {
 	let state = actions.createNewState()
-	const deck = book.deck.map(engineCard)
+	const deck = book.deck.map((c) => engineCard(c, content))
 	state = produce(state, (d) => {
 		d.dungeon = oneNodeDungeon(monster)
 		d.deck = deck
@@ -195,7 +244,7 @@ export function createFighterState(book, monster, rand) {
  * @prop {number} deckSize
  */
 
-const ENGINE_KEYS = ['turn', 'drawPile', 'hand', 'discardPile', 'exhaustPile', 'player']
+const ENGINE_KEYS = ['turn', 'drawPile', 'hand', 'discardPile', 'exhaustPile', 'player', 'mech']
 
 /** Attach the shared Warden to a slim fighter state so engine actions can run on it. */
 function withRoom(pc, s) {
@@ -213,7 +262,7 @@ function fromRoom(pc, state) {
 	pc.warden.block = m.block
 	pc.warden.powers = clean(m.powers)
 	const slim = {}
-	for (const k of ENGINE_KEYS) slim[k] = plain(state[k])
+	for (const k of ENGINE_KEYS) if (state[k] !== undefined) slim[k] = plain(state[k])
 	return slim
 }
 const decreasePowers = (powers) => Object.fromEntries(Object.entries(powers || {}).map(([k, v]) => [k, v > 0 ? v - 1 : v]))
@@ -252,9 +301,10 @@ export function createPartyCombat({fighters, enemyId = 'ashWarden', seed, now = 
 	for (const f of sorted) {
 		const book = f.book
 		const tokens = [...(f.tokens ?? book.tokens ?? [])]
-		const full = createFighterState(book, monster, rand)
+		const content = f.content ?? book.content
+		const full = createFighterState(book, monster, rand, content)
 		const slim = {}
-		for (const k of ENGINE_KEYS) slim[k] = plain(full[k])
+		for (const k of ENGINE_KEYS) if (full[k] !== undefined) slim[k] = plain(full[k])
 		let s = slim
 		// GDD 3.4 tokens, applied after the state exists and cards are drawn.
 		if (tokens.includes('ember')) {
@@ -271,7 +321,7 @@ export function createPartyCombat({fighters, enemyId = 'ashWarden', seed, now = 
 			pc.warden.powers.vulnerable = Math.max(pc.warden.powers.vulnerable || 0, WHETSTONE_VULNERABLE)
 			pc.startEvents.push({k: 'token', seat: f.seat, text: 'Whetstone: the Warden is Vulnerable.'})
 		}
-		pc.fighters.push({
+		const fighter = {
 			seat: f.seat,
 			name: String(f.name ?? `Reader ${f.seat + 1}`).slice(0, 24),
 			s: plain(s),
@@ -282,15 +332,36 @@ export function createPartyCombat({fighters, enemyId = 'ashWarden', seed, now = 
 			tip: Boolean(book.marcus?.flags?.tip),
 			tokens,
 			deckSize: book.deck.length,
-		})
+		}
+		pc.fighters.push(fighter)
+		// Mechanics: items, generated tokens, fight-start triggers (docs/MECHANICS.md 5).
+		const genTokens = tokens.filter(isGeneratedId)
+		pc.startEvents.push(...mech.mechSetup(pc, fighter, {content, items: f.items ?? book.items, tokens: genTokens, seed: seed ?? 0}))
 	}
 	setIntents(pc)
+	mechTurnStarts(pc, pc.startEvents)
 	pc.startEvents.unshift({k: 'round', amount: 1})
 	return pc
 }
 
+/** Base (unmodified) Warden intent against one fighter this round, for mechanics conditions. */
+function baseIntentFor(pc, seat) {
+	const i = pc.intents.find((x) => x.seat === seat)
+	return i ? ENEMIES[pc.enemyId].intents[i.step - 1] : null
+}
+
+/** Mechanics turn-start hooks for every active, connected fighter, then death checks. */
+function mechTurnStarts(pc, events) {
+	for (const f of pc.fighters) {
+		if (!active(f) || !f.connected || f.away) continue
+		events.push(...mech.mechTurnStart(pc, f, baseIntentFor(pc, f.seat)))
+		checkDeath(pc, f, events)
+	}
+	if (!pc.fighters.some(active)) finish(pc, false, events)
+}
+
 function setIntents(pc) {
-	pc.intents = pc.fighters.filter(active).map((f, k) => ({seat: f.seat, step: intentStep(pc.round, k)}))
+	pc.intents = pc.fighters.filter(active).map((f, k) => ({seat: f.seat, step: intentStep(pc.round, k, cycleOf(pc.enemyId))}))
 }
 
 const err = (pc, error) => ({pc, events: [], error})
@@ -325,14 +396,20 @@ export function combatStep(pc0, seat, action, now = Date.now()) {
 			const state = actions.playCard(withRoom(pc, f.s), {card: liveCard(card), target})
 			f.s = fromRoom(pc, state)
 			events.push({k: 'play', seat, text: baseName(card.name), cardId: card.id})
+			events.push(...mech.mechAfterPlay(pc, f, card))
 			const dmg = before.hp - pc.warden.hp
 			const blocked = Math.max(0, before.block - pc.warden.block)
 			if (dmg > 0 || blocked > 0) events.push({k: 'damage', seat: -1, by: seat, amount: dmg, blocked})
 			const gained = f.s.player.block - before.pBlock
 			if (gained > 0) events.push({k: 'block', seat, amount: gained})
 			if (pc.warden.hp < 1) {
+				events.push(...mech.mechOnKill(pc, f))
 				pc.warden.hp = 0
 				finish(pc, true, events)
+			} else {
+				// Generated cards and triggers can cost HP mid-turn (Lose HP, Thorns).
+				checkDeath(pc, f, events)
+				if (f.dead) maybeResolveRound(pc, events)
 			}
 			break
 		}
@@ -401,6 +478,7 @@ function resolveTarget(card, requested) {
 /** End one fighter's turn: Doubt tick (GDD 3.3, ignores block), then discard the hand. */
 function endFighter(pc, f, events, real) {
 	if (real) {
+		events.push(...mech.mechTurnEnd(pc, f))
 		const doubts = f.s.hand.filter((c) => c.name === CURSE_ID).length
 		if (doubts > 0) {
 			const amount = doubts * DOUBT_TICK
@@ -411,7 +489,7 @@ function endFighter(pc, f, events, real) {
 			)
 			events.push({k: 'doubt', seat: f.seat, amount, text: 'Doubt gnaws at you. (-2 HP)'})
 		}
-		f.s = plain(actions.discardHand(f.s))
+		f.s = mech.mechDiscardHand(f.s, actions.discardHand) // keeps Retain cards
 	}
 	f.ended = true
 	f.away = false
@@ -441,6 +519,11 @@ function wardenTurn(pc, events) {
 	// intent this round adds into the ONE shared block (GDD 7.3).
 	let block = 0
 	pc.warden.block = 0
+	events.push(...mech.mechEnemyTurnStart(pc)) // Warden Poison/Regen tick
+	if (pc.warden.hp < 1) {
+		pc.warden.hp = 0
+		return finish(pc, true, events)
+	}
 	for (const intent of pc.intents) {
 		const f = fighterOf(pc, intent.seat)
 		if (!f || !active(f) || !f.connected || f.away) continue // skipped
@@ -461,7 +544,12 @@ function wardenTurn(pc, events) {
 			amount: before.hp - f.s.player.currentHealth,
 			blocked: Math.max(0, before.block - f.s.player.block),
 		})
+		events.push(...mech.mechAfterEnemyHit(pc, f, before, ENEMIES[pc.enemyId].intents[intent.step - 1]))
 		checkDeath(pc, f, events)
+	}
+	if (pc.warden.hp < 1) {
+		pc.warden.hp = 0 // Thorns
+		return finish(pc, true, events)
 	}
 	pc.warden.block = block
 	if (block > 0) events.push({k: 'block', seat: -1, amount: block})
@@ -470,6 +558,7 @@ function wardenTurn(pc, events) {
 	// which endTurn uses but actions.js does not export.)
 	for (const f of pc.fighters.filter(active)) f.s.player.powers = decreasePowers(f.s.player.powers)
 	pc.warden.powers = clean(decreasePowers(pc.warden.powers))
+	mech.mechRoundEnd(pc) // "for the rest of the fight" powers stay
 	if (!pc.fighters.some(active)) return finish(pc, false, events)
 	newRound(pc, events)
 }
@@ -494,6 +583,7 @@ function newRound(pc, events) {
 	}
 	setIntents(pc)
 	events.push({k: 'round', amount: pc.round})
+	mechTurnStarts(pc, events)
 }
 
 function finish(pc, won, events) {
@@ -529,6 +619,7 @@ function intentFor(pc, intent) {
 	const out = {seat: intent.seat, step: intent.step, damage, name: f?.name ?? ''}
 	if (base.block) out.block = base.block
 	if (base.weak) out.weak = base.weak
+	if (base.vulnerable) out.vulnerable = base.vulnerable
 	out.label = intentLabel(out, pc.enemyId)
 	out.skipped = !f || !active(f) || !f.connected
 	return out
@@ -553,6 +644,7 @@ export function viewFor(pc, seat) {
 					playable: !pc.over && active(me) && !me.ended && me.connected && !unplayable && canPlay(me.s, c),
 					target: c.target,
 					description: c.description,
+					...(c.everGen ? {gen: c.everGen, art: c.everArt, rarity: c.everRarity} : {}),
 				}
 			})
 		: []

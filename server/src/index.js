@@ -4,6 +4,8 @@
 
 import {PROTOCOL_VERSION, ROOM_ROUTES, isValidRoomCode, makeRoomCode} from '../../game/src/core/contracts.js'
 export {Room} from './room.js'
+export {WorldBot} from './world-bot.js'
+import {handleWorld} from './world-route.js'
 
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.localhost)(:\d+)?$/
 
@@ -33,6 +35,9 @@ export default {
 		if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors(origin)})
 
 		if (url.pathname === ROOM_ROUTES.health) return json({ok: true, v: PROTOCOL_VERSION}, 200, origin)
+
+		// World bot (major changes, docs/PLATFORM.md): POST /world/proposals, GET /world/proposals/<id>
+		if (url.pathname.startsWith('/world/proposals')) return handleWorld(req, env, url, origin, json)
 
 		if (url.pathname === ROOM_ROUTES.create && req.method === 'POST') {
 			let v = PROTOCOL_VERSION

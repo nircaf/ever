@@ -1,0 +1,19 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "well-wildflowers",
+	"themes": [
+		"well"
+	],
+	"proposal": {
+		"kind": "place",
+		"data": {
+			"anchor": "well",
+			"prop": "wildflowers"
+		}
+	}
+}

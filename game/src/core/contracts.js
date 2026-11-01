@@ -22,6 +22,15 @@
 export const PROTOCOL_VERSION = 1
 /** Book/save schema version (localStorage + book objects). */
 export const BOOK_VERSION = 1
+/** v2 seeded books (GDD_V2): `book.v === BOOK_V2`. Shape in core/rules/run.js. */
+export const BOOK_V2 = 2
+/**
+ * Engine version a v2 book is pinned to (GDD_V2 16). Bump the MAJOR part only when an
+ * in-progress book can no longer be played by this code (it then closes "unfinished").
+ */
+export const ENGINE_VERSION = '0.3.0'
+/** World edition used when the world manifest cannot be read (offline, tests). */
+export const WORLD_EDITION_FALLBACK = 1
 
 export const START_HP = 50
 export const MAX_SEATS = 4
@@ -335,6 +344,9 @@ export const EV = Object.freeze({
 	PEER_MOVE: 'net:move', //          {seat, x, z, yaw, walking}
 	COMBAT_VIEW: 'combat:view', //     {view: CombatView}
 	COMBAT_DONE: 'combat:done', //     CombatResult
+	// v2 (GDD_V2)
+	SITE_RANGE: 'world:site', //       {site: string|null}  v2 site in range (cart, bench, rings...)
+	PAGE_CHANGED: 'book:page', //      {page, L}            the current page of a v2 book changed
 })
 
 /** @returns {{on(type: string, fn: (p: any) => void): () => void, once(type: string, fn: (p: any) => void): () => void, emit(type: string, payload?: any): void, clear(): void}} */
@@ -382,6 +394,10 @@ export const STORAGE_KEYS = Object.freeze({
 	seat: (code) => `ever.v1.seat.${code}`, // {seatToken, seat, name, at} (GDD 7.1)
 	name: 'ever.v1.name', //              last used player name (convenience)
 	settings: 'ever.v1.settings', //      {reducedMotion?, quality?} (convenience)
+	// v2 (GDD_V2 21)
+	metaV2: 'ever.v2.meta', //            MetaV2: booksWritten, rememberedLine, echo, cleanReads, lastSeed
+	bookV2: 'ever.v2.book', //            the in-progress solo v2 book (saved after every page)
+	consent: 'ever.v2.consent', //        the Last Page fine print was shown in this browser
 })
 
 function store(storage) {
@@ -438,8 +454,50 @@ export function loadName(storage) {
 export function saveName(name, storage) {
 	return writeJson(STORAGE_KEYS.name, name, storage)
 }
-// There is deliberately no saveBook(): there is no mid-book save (GDD 1.1). A solo
-// reload counts the book as written: core calls closeBookOnUnload() from pagehide.
+// MVP (v1) books have no mid-book save (GDD 1.1). v2 books are saved after every page
+// (GDD_V2 16) with saveBookV2 / loadBookV2 below.
+
+/**
+ * v2 meta (GDD_V2 21). On first load, ever.v1.meta is migrated (booksWritten and the
+ * remembered line are kept).
+ * @typedef {{booksWritten: number, rememberedLine: string, echo: null | {def: object, name: string, fromBook: number}, cleanReads: boolean, lastSeed: string}} MetaV2
+ * @returns {MetaV2}
+ */
+export function loadMetaV2(storage) {
+	const m = readJson(STORAGE_KEYS.metaV2, null, storage)
+	const base = m && typeof m === 'object' ? m : loadMeta(storage)
+	const echo = base.echo && typeof base.echo === 'object' && base.echo.def && typeof base.echo.name === 'string' ? {def: base.echo.def, name: base.echo.name.slice(0, 24), fromBook: Number(base.echo.fromBook) | 0} : null
+	return {
+		booksWritten: Number.isInteger(base.booksWritten) && base.booksWritten >= 0 ? base.booksWritten : 0,
+		rememberedLine: typeof base.rememberedLine === 'string' ? base.rememberedLine.slice(0, 200) : '',
+		echo,
+		cleanReads: Boolean(base.cleanReads),
+		lastSeed: typeof base.lastSeed === 'string' ? base.lastSeed.slice(0, 8) : '',
+	}
+}
+/** Saves v2 meta and keeps ever.v1.meta in step (older code and tests read it). */
+export function saveMetaV2(meta, storage) {
+	saveMeta(meta, storage)
+	return writeJson(STORAGE_KEYS.metaV2, {booksWritten: meta.booksWritten, rememberedLine: meta.rememberedLine, echo: meta.echo ?? null, cleanReads: Boolean(meta.cleanReads), lastSeed: meta.lastSeed ?? ''}, storage)
+}
+/** The in-progress v2 book (raw; core/rules/run.js parseSavedBook re-checks it). */
+export function loadBookV2(storage) {
+	return readJson(STORAGE_KEYS.bookV2, null, storage)
+}
+export function saveBookV2(book, storage) {
+	return writeJson(STORAGE_KEYS.bookV2, book, storage)
+}
+export function clearBookV2(storage) {
+	try {
+		store(storage)?.removeItem(STORAGE_KEYS.bookV2)
+	} catch {}
+}
+export function loadFlag(key, storage) {
+	return Boolean(readJson(key, false, storage))
+}
+export function saveFlag(key, on, storage) {
+	return writeJson(key, Boolean(on), storage)
+}
 
 // =====================================================================================
 // 5. Modes. One WebGL canvas (#world) serves both modes: combat re-frames the same
@@ -904,6 +962,30 @@ export function createBridgeClient({origin, fetch: f = globalThis.fetch}) {
 				const body = await r.json()
 				const v = validateAiProposal(String(body?.text ?? ''))
 				return v.ok ? {ok: true, proposal: v.proposal, model: body.model} : {ok: false, reason: 'invalid'}
+			} catch {
+				return {ok: false, reason: 'error'}
+			}
+		},
+		/**
+		 * v2: any other prompt (offers, world-change proposals). Returns the model's RAW
+		 * text, capped at 16 KB: the caller must treat it as hostile data and validate it
+		 * (core/ai-offers.js does, through mechanics validateContent).
+		 * @param {string} instructions @param {string} input
+		 * @returns {Promise<{ok: true, text: string, model?: string} | {ok: false, reason: 'off'|'limit'|'auth'|'error'}>}
+		 */
+		async askText(instructions, input) {
+			if (!enabled) return {ok: false, reason: 'off'}
+			try {
+				const r = await withTimeout('/api/ai', {
+					method: 'POST',
+					headers: {...H, 'content-type': 'application/json'},
+					body: JSON.stringify({instructions, input}),
+				})
+				if (r.status === 429) return {ok: false, reason: 'limit'}
+				if (r.status === 401 || r.status === 403) return {ok: false, reason: 'auth'}
+				if (!r.ok) return {ok: false, reason: 'error'}
+				const body = await r.json()
+				return {ok: true, text: String(body?.text ?? '').slice(0, 16384), model: typeof body?.model === 'string' ? body.model : undefined}
 			} catch {
 				return {ok: false, reason: 'error'}
 			}

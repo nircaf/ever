@@ -1,0 +1,30 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "oath-bellringer",
+	"themes": [
+		"oath"
+	],
+	"proposal": {
+		"kind": "npc",
+		"data": {
+			"id": "sela-bellringer",
+			"name": "Sela the Bellringer",
+			"archetype": "keeper",
+			"look": {
+				"cloak": "slate",
+				"accent": "gold",
+				"prop": "bell"
+			},
+			"bias": "card",
+			"openings": {
+				"oath": "Every bell here was a promise once. Ring one if you mean it.",
+				"ash": "The bells went quiet after the fire. I still polish them."
+			}
+		}
+	}
+}

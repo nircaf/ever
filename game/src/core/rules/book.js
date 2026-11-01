@@ -26,6 +26,11 @@ import {
 } from '../contracts.js'
 import {COPY} from '../copy.js'
 import {EPILOGUE, FREE_RULES, FREE_TEXT_CAP, GREETINGS, LINES, NOTHING_MORE, OPTION_TEXT, classifyFreeText, topicAnswer} from './marcus.js'
+import {MARCUS_OFFER, MARCUS_REQUEST, COPY2} from '../copy-v2.js'
+import {RUN_ACTIONS, applyRunAction, currentPage, gainDoubtV2, isRequest, isV2} from './run.js'
+
+/** v2: the option that opens Marcus's Offer panel (GDD_V2 10.2 beat 4). */
+const OFFER_OPTION = 'offer'
 
 /** Display name of a deck card: base id plus "+" when upgraded (engine convention). */
 export const cardLabel = (c) => c.id + (c.upgraded ? '+' : '')
@@ -50,11 +55,19 @@ function gainCard(s, id) {
 	s.fx.push({k: 'card', op: 'add', id})
 }
 function gainDoubt(s, source, n = 1) {
+	if (isV2(s.b)) {
+		gainDoubtV2(s, source, n)
+		return
+	}
 	s.b = addCurse(s.b, source, n)
 	for (let i = 0; i < n; i++) s.fx.push({k: 'card', op: 'add', id: CURSE_ID})
 }
 function gainToken(s, kind) {
-	s.b = addToken(s.b, kind)
+	if (isV2(s.b)) {
+		// v2 tokens also hold generated ids (g:t-...): keep them, max 3 in all.
+		if (s.b.tokens.includes(kind) || s.b.tokens.length >= 3) return
+		s.b.tokens.push(kind)
+	} else s.b = addToken(s.b, kind)
 	s.fx.push({k: 'token', kind})
 	toast(s, COPY.toasts.tokenGained(COPY.hud.tokenName[kind]))
 }
@@ -74,9 +87,12 @@ export function marcusOptionIds(b) {
 	const f = m.flags
 	if (b.status === 'epilogue') return []
 	if (!f.met || m.beat === 1) return ['b1.what', 'b1.sorry', 'b1.smith']
-	if (m.trust <= -2) return []
+	const v2 = isV2(b)
+	// v2: Marcus's work comes through the Offer panel (GDD_V2 10.2); Cold still offers one bargain.
+	if (m.trust <= -2) return v2 && !f.struck ? [OFFER_OPTION] : []
 	const out = []
-	if (!m.anvilClosed && m.upgradesLeft > 0) out.push('anvil.open')
+	if (v2) out.push(OFFER_OPTION)
+	else if (!m.anvilClosed && m.upgradesLeft > 0) out.push('anvil.open')
 	if (f.confessed) {
 		const forgave = m.said.includes('b3.forgive')
 		if (!forgave) out.push('b3.forgive')
@@ -94,11 +110,12 @@ export function marcusPanel(b) {
 		trust: b.marcus.trust,
 		word: trustWord(b.marcus.trust),
 		freeText: !b.marcus.flags.struck && b.status === 'exploring',
-		options: marcusOptionIds(b).map((id) => ({id, text: OPTION_TEXT[id]})),
+		options: marcusOptionIds(b).map((id) => ({id, text: optionText(id)})),
 	}
 }
 
-const pushOptions = (s) => s.fx.push({k: 'options', options: marcusOptionIds(s.b).map((id) => ({id, text: OPTION_TEXT[id]}))})
+const optionText = (id) => (id === OFFER_OPTION ? COPY2.moment.offerAsk : OPTION_TEXT[id])
+const pushOptions = (s) => s.fx.push({k: 'options', options: marcusOptionIds(s.b).map((id) => ({id, text: optionText(id)}))})
 
 /**
  * Apply the trust thresholds of GDD 2.2 after a change. `prev` is the trust before it.
@@ -116,7 +133,8 @@ function settle(s, prev, allowCold = true) {
 		toast(s, COPY.toasts.doubt)
 	}
 	if (prev >= 2 !== t >= 2) s.fx.push({k: 'lantern', lit: t >= 2})
-	if (t >= 1 && !s.b.marcus.anvilClosed && !s.b.marcus.flags.upgradeAt1) {
+	// v2 has no anvil: Marcus's work is the Offer panel (GDD_V2 10.2).
+	if (t >= 1 && !s.b.marcus.anvilClosed && !s.b.marcus.flags.upgradeAt1 && !isV2(s.b)) {
 		s.b.marcus.flags.upgradeAt1 = true
 		s.b.marcus.upgradesLeft += 1
 		toast(s, COPY.toasts.anvilOpen)
@@ -126,7 +144,7 @@ function settle(s, prev, allowCold = true) {
 		say(s, LINES.ember)
 		gainToken(s, 'ember')
 	}
-	if (t >= 3 && !s.b.marcus.anvilClosed && !s.b.marcus.flags.upgradeAt3) {
+	if (t >= 3 && !s.b.marcus.anvilClosed && !s.b.marcus.flags.upgradeAt3 && !isV2(s.b)) {
 		s.b.marcus.flags.upgradeAt3 = true
 		s.b.marcus.upgradesLeft += 1
 		say(s, LINES.second)
@@ -236,6 +254,10 @@ function option(s, id) {
 			changeTrust(s, -2)
 			close = true
 			break
+		case OFFER_OPTION:
+			say(s, MARCUS_OFFER)
+			s.fx.push({k: 'offer'})
+			return null
 		case 'anvil.open':
 			say(s, LINES.anvilPrompt)
 			s.fx.push({k: 'picker', purpose: 'anvil'})
@@ -282,6 +304,13 @@ function freeText(s, action) {
 			aiTrust = v.proposal.trust
 		}
 	}
+	// v2: the 9th intent, request (GDD_V2 10.1): no trust change, it steers the next offer.
+	if (isV2(s.b) && isRequest(text)) {
+		s.b.marcus.request = text.slice(0, FREE_TEXT_MAX)
+		say(s, MARCUS_REQUEST)
+		pushOptions(s)
+		return null
+	}
 	if (!intent) intent = classifyFreeText(text)
 
 	const rule = FREE_RULES[intent]
@@ -295,6 +324,7 @@ function freeText(s, action) {
 	else if (rule.reply) say(s, rule.reply[variant])
 
 	if (intent === 'attack') {
+		if (isV2(s.b)) s.b.marks = Math.min(2, (s.b.marks ?? 0) + 1) // GDD_V2 13: the Warden carries it
 		changeTrust(s, 0, {setTo: rule.setTrust, allowCold: false})
 		s.b.marcus.flags.struck = true
 		s.b.marcus.anvilClosed = true
@@ -353,6 +383,17 @@ const STATION_OF = {
 export function applyBookAction(book, action, ctx) {
 	if (!book || !action || typeof action.type !== 'string') return fail(book, 'bad_action')
 	if (action.type === 'marcus.friendStruck') return friendStruck(book)
+	// v2 seeded books: pages, offers, stations, spoils, fights (core/rules/run.js).
+	if (isV2(book)) {
+		if (RUN_ACTIONS.has(action.type)) return applyRunAction(book, action, ctx)
+		if (action.type === 'anvil.upgrade' || action.type === 'lectern.leave') return fail(book, 'not_allowed')
+		if (STATION_OF[action.type] === 'marcus' && book.status === 'exploring') {
+			// Marcus is page one; on any other page he only nods (GDD_V2 6.3).
+			if (currentPage(book)?.type !== 'marcus') return fail(book, 'not_now', [{k: 'say', who: 'marcus', text: COPY2.hud.notYetNpc('Marcus'), narr: true}])
+			if (book.pend) return fail(book, 'pending')
+			if (ctx?.maxPage !== undefined && book.page > ctx.maxPage) return fail(book, 'wait')
+		}
+	}
 	if (action.type === 'epilogue.stay') {
 		// "Stay in Ashbrook" after a win (solo and co-op): the book stays won, the village
 		// stays open for a last word with Marcus. No deck change.

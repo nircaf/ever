@@ -1,0 +1,84 @@
+/*
+ * EVER v2 UI layout: new book, contents, offers side by side, equipment, last page.
+ * Uses only the tokens and components from shared/style.css (no new colors).
+ * OWNER: systems engineer.
+ * Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+.ever-modal > .ever-panel.ever-run,
+.ever-modal > .ever-panel:has(.ever-run__row) { width: min(760px, 100%); }
+.ever-run__row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 8px 0 14px; }
+.ever-run__row > .ever-card { flex: 0 0 auto; }
+.ever-run__small { font-size: var(--ever-fs-sm); margin: -4px 0 12px; }
+.ever-run__extra { position: absolute; left: 6px; right: 6px; bottom: -6px; transform: translateY(100%); text-align: center; pointer-events: none; }
+.ever-run__row > .ever-card { margin-bottom: 44px; }
+.ever-run__chips { display: flex; gap: 4px; justify-content: center; }
+.ever-run__chip { font-size: var(--ever-fs-xs); font-weight: 800; padding: 1px 8px; border-radius: 999px; border: 1.5px solid var(--ever-ink); background: var(--ever-paper); }
+.ever-run__chip--bargain { background: var(--ever-dusk); }
+.ever-run__chip--sealed, .ever-run__chip--curse { background: var(--ever-doubt); color: var(--ever-paper); }
+.ever-run__chip--echo { background: var(--ever-ward); }
+.ever-run__cost, .ever-run__twist { margin: 2px 0 0; font-size: var(--ever-fs-xs); line-height: 1.25; }
+.ever-run__cost { color: var(--ever-ember); font-weight: 700; }
+.ever-run__twist { color: var(--ever-slate); font-weight: 700; }
+.ever-card__flavor { margin: 2px 8px 0; font-size: 10px; font-style: italic; opacity: 0.75; line-height: 1.2; }
+.ever-card[data-rarity='uncommon'] { box-shadow: 0 0 0 2px var(--ever-ward), var(--ever-shadow); }
+.ever-card[data-rarity='rare'] { box-shadow: 0 0 0 2px var(--ever-gold), var(--ever-shadow); }
+.ever-card[data-rarity='keepsake'] { box-shadow: 0 0 0 2px var(--ever-ember), var(--ever-shadow); }
+.ever-card[data-type='item'] { --type: var(--ever-gold); }
+.ever-card[data-type='token'] { --type: var(--ever-card-token); }
+
+/* contents */
+.ever-run__contents { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; gap: 4px; text-align: left; }
+.ever-run__page { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; border-radius: 8px; }
+.ever-run__page.is-done { opacity: 0.6; }
+.ever-run__page.is-here { background: color-mix(in srgb, var(--ever-gold) 30%, transparent); font-weight: 700; }
+.ever-run__mark { width: 1.2em; flex: none; text-align: center; }
+.ever-run__here { margin-left: auto; font-size: var(--ever-fs-xs); font-weight: 800; }
+
+/* equipment in the deck viewer */
+.ever-run__sub { margin: 16px 0 8px; font-size: var(--ever-fs-md); text-align: left; }
+.ever-run__items { display: flex; flex-wrap: wrap; gap: 10px; }
+.ever-run__empty { flex: 0 0 auto; min-width: 120px; min-height: 60px; display: grid; place-items: center; border: 2px dashed var(--ever-haze); border-radius: 12px; font-size: var(--ever-fs-xs); color: var(--ever-ink-soft); padding: 8px; }
+
+/* HUD: item slots are round like token slots, gold rim when full, dashed haze when empty */
+.ever-items .ever-item { border-style: dashed; border-color: var(--ever-haze); }
+.ever-items .ever-item.is-full { border-style: solid; border-color: var(--ever-gold); background: var(--ever-paper); }
+.ever-item { position: relative; cursor: help; }
+.ever-item[data-tip]:hover::after,
+.ever-item[data-tip]:focus-visible::after,
+.ever-item[data-tip].is-tip::after,
+.ever-tokens .ever-token[data-tip]:not(:empty):hover::after {
+	content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+	width: max-content; max-width: 240px; padding: 6px 10px; border-radius: 8px; background: var(--ever-ink); color: var(--ever-paper);
+	font-size: var(--ever-fs-xs); line-height: 1.35; white-space: normal; z-index: 5; pointer-events: none;
+}
+.ever-pill--page .ever-pill__dot { background: var(--ever-gold); }
+
+/* new book */
+.ever-newbook { text-align: left; width: min(460px, 100%); }
+.ever-newbook h2 { text-align: center; }
+.ever-newbook__row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.ever-newbook__row .ever-input { flex: 1 1 180px; text-transform: none; }
+.ever-newbook__preview { margin: 12px 0 4px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--ever-dusk) 25%, transparent); line-height: 1.5; min-height: 4.5em; }
+.ever-newbook__preview p { margin: 0; }
+.ever-newbook__code { font-family: var(--ever-font-ui); font-weight: 800; letter-spacing: 0.08em; font-variant-numeric: lining-nums tabular-nums; }
+.ever-newbook__check { display: flex; gap: 8px; align-items: center; font-size: var(--ever-fs-sm); margin-top: 8px; }
+.ever-cover__edition { margin: 6px 0 0; font-size: var(--ever-fs-sm); }
+.ever-cover__edition a { color: var(--ever-ink); }
+.ever-cover__continue small { display: block; font-size: var(--ever-fs-xs); font-weight: 600; opacity: 0.8; }
+
+/* last page */
+.ever-last { width: min(760px, 100%); }
+.ever-last__list { display: grid; gap: 10px; margin: 12px 0; text-align: left; }
+.ever-last__opt { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--ever-ink); background: var(--ever-paper); cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.ever-last__opt.is-selected { box-shadow: 0 0 0 3px var(--ever-gold); }
+.ever-last__opt img { width: 56px; height: 56px; grid-row: span 3; }
+.ever-last__kind { font-size: var(--ever-fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; }
+.ever-last__title { font-weight: 800; }
+.ever-last__fine { font-size: var(--ever-fs-xs); line-height: 1.45; opacity: 0.85; }
+.ever-last__status { min-height: 1.5em; font-weight: 700; }
+
+@media (max-width: 640px) {
+	.ever-run__row { gap: 8px; }
+	.ever-run__row > .ever-card { margin-bottom: 52px; }
+}

@@ -1,0 +1,32 @@
+# EVER: turn on GitHub auto-merge for world-bot PRs. GitHub merges them only after the
+# required check "ever-check" passes (branch protection, docs/PLATFORM.md 4). The world bot
+# Worker also enables auto-merge itself as the App; this workflow is the fallback.
+# It never checks out or runs PR code.
+# Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
+name: world-auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    if: >-
+      vars.EVER_BOT_LOGIN != '' &&
+      github.event.pull_request.user.login == vars.EVER_BOT_LOGIN &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'world/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR" --auto --squash

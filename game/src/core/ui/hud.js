@@ -2,10 +2,15 @@
 // roster (GDD 6 "HUD"). Pure view: game.js feeds it. OWNER: systems engineer.
 // Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 
-import {TOKEN_KINDS} from '../contracts.js'
+import {TOKEN_KINDS, BOOK_V2} from '../contracts.js'
 import {COPY} from '../copy.js'
+import {COPY2} from '../copy-v2.js'
+import {getDef, rulesText} from '../../mechanics/index.js'
 import {h} from './dom.js'
-import {iconFor} from './cards.js'
+import {defIcon, iconFor} from './cards.js'
+
+const ITEM_SLOTS = ['hand', 'body', 'charm']
+const isCurse = (book, c) => c.id === 'Doubt' || getDef(book.content, c.id)?.kind === 'curse'
 
 /**
  * @param {HTMLElement} root
@@ -30,7 +35,22 @@ export function createHud(root, cb) {
 		return el
 	})
 	const tokens = h('span', {class: 'ever-tokens', 'aria-label': COPY.hud.tokens}, ...slots)
-	const bar = h('div', {class: 'ever-hud'}, hpPill, deckPill, doubtPill, tokens)
+	// v2 (GDD_V2 19 HUD): page pill, item slots, marks, generated tokens.
+	const pageText = h('span', {text: ''})
+	const pagePill = h('button', {class: 'ever-pill ever-pill--page', type: 'button', title: COPY2.hud.pageTip, hidden: true, onclick: () => cb.onContents?.()}, h('span', {class: 'ever-pill__dot'}), pageText)
+	const markText = h('span', {text: ''})
+	const markPill = h('span', {class: 'ever-pill ever-pill--doubt', title: COPY2.hud.marksTip, hidden: true}, h('span', {class: 'ever-pill__dot'}), markText)
+	const itemSlots = ITEM_SLOTS.map((slot) => {
+		const el = h('span', {class: 'ever-token ever-item', 'data-slot': slot, role: 'img', tabindex: '0'})
+		el.addEventListener('click', () => {
+			el.classList.add('is-tip')
+			setTimeout(() => el.classList.remove('is-tip'), 3000)
+		})
+		return el
+	})
+	const items = h('span', {class: 'ever-tokens ever-items', 'aria-label': 'Equipment', hidden: true}, ...itemSlots)
+	const genTokens = h('span', {class: 'ever-tokens', hidden: true})
+	const bar = h('div', {class: 'ever-hud'}, pagePill, hpPill, deckPill, doubtPill, markPill, tokens, genTokens, items)
 
 	const hint = h('div', {class: 'ever-hint', hidden: true})
 	const prompt = h('button', {class: 'ever-prompt', type: 'button', hidden: true, onclick: () => cb.onPrompt()})
@@ -54,9 +74,42 @@ export function createHud(root, cb) {
 		update(book) {
 			hpText.textContent = COPY.hud.hp(book.hp, book.maxHp)
 			deckText.textContent = COPY.hud.deck(book.deck.length)
-			const doubts = book.deck.filter((c) => c.id === 'Doubt').length
-			doubtText.textContent = COPY.hud.doubts(doubts)
+			const v2 = book.v === BOOK_V2
+			const doubts = v2 ? book.deck.filter((c) => isCurse(book, c)).length : book.deck.filter((c) => c.id === 'Doubt').length
+			doubtText.textContent = v2 ? COPY2.hud.curses(doubts) : COPY.hud.doubts(doubts)
+			doubtPill.title = v2 ? COPY2.hud.cursesTip : COPY.hud.doubtTip
 			doubtPill.hidden = doubts === 0
+			pagePill.hidden = !v2
+			items.hidden = !v2
+			markPill.hidden = !v2 || !book.marks
+			if (v2) {
+				pageText.textContent = COPY2.hud.page(Math.min(book.page + 1, book.path.L), book.path.L)
+				markText.textContent = COPY2.hud.marks(book.marks)
+				for (const el of itemSlots) {
+					const slot = el.dataset.slot
+					const id = (book.items ?? []).find((x) => getDef(book.content, x)?.slot === slot)
+					const def = id ? getDef(book.content, id) : null
+					el.classList.toggle('is-full', Boolean(def))
+					const name = COPY2.hud.slotName[slot]
+					const tip = def ? COPY2.hud.itemTip(def.name, name, rulesText(def)) + (def.bound ? ` ${COPY2.hud.bound}` : '') : COPY2.hud.itemEmpty(name)
+					el.dataset.tip = tip
+					el.setAttribute('aria-label', tip)
+					if (el.dataset.item !== (id ?? '')) {
+						el.dataset.item = id ?? ''
+						const src = def ? defIcon(def) : ''
+						el.replaceChildren(...(src ? [h('img', {src, alt: ''})] : []))
+					}
+				}
+				const gen = (book.tokens ?? []).filter((t) => String(t).startsWith('g:'))
+				genTokens.hidden = !gen.length
+				genTokens.replaceChildren(
+					...gen.map((id) => {
+						const def = getDef(book.content, id)
+						const src = def ? defIcon(def) : ''
+						return h('span', {class: 'ever-token is-full', tabindex: '0', 'data-tip': def ? `${def.name}: ${rulesText(def)}` : '', 'aria-label': def?.name ?? 'Token'}, src ? h('img', {src, alt: ''}) : null)
+					}),
+				)
+			}
 			for (const slot of slots) {
 				const kind = slot.dataset.kind
 				const full = book.tokens.includes(kind)
@@ -97,7 +150,7 @@ export function createHud(root, cb) {
 			}
 			party.hidden = false
 			roomChip.dataset.code = room.code
-			roomChip.textContent = COPY.hud.room(room.code)
+			roomChip.textContent = room.seed ? COPY2.coop.chip(room.code, `${room.seed.slice(0, 4)}-${room.seed.slice(4)}`) : COPY.hud.room(room.code)
 			list.replaceChildren(
 				...room.seats.map((s) =>
 					h(

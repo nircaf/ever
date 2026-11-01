@@ -1,8 +1,26 @@
-# Cloudflare Pages headers for game.dreamz.rest. Owner: Technical Director.
+# Cloudflare Pages headers for game.dreamz.rest. Owner: Technical Director (caching: platform, docs/PLATFORM.md 6).
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' wss://game.dreamz.rest; worker-src 'self' blob:; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+
+# The page shell: always revalidate, so a deploy is picked up on the next load.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+
+# Hashed build output (file names change with content): cache forever.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# World content is addressed by hash (world/f/<hash>.json): cache forever.
+/world/f/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The world manifest and the version file are small and must stay fresh.
+/world/manifest.json
+  Cache-Control: public, max-age=60, must-revalidate
+/version.json
+  Cache-Control: no-cache

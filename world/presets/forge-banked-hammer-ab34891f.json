@@ -1,0 +1,56 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "forge-banked-hammer",
+	"themes": [
+		"forge"
+	],
+	"proposal": {
+		"kind": "card",
+		"data": {
+			"def": {
+				"v": 1,
+				"kind": "card",
+				"name": "Banked Hammer",
+				"flavor": "It still remembers the shape of the last horseshoe.",
+				"theme": "forge",
+				"type": "attack",
+				"rarity": "uncommon",
+				"energy": 1,
+				"target": "enemy",
+				"exhaust": false,
+				"retain": false,
+				"effects": [
+					{
+						"do": "damage",
+						"n": 6,
+						"hits": 1,
+						"target": "enemy"
+					},
+					{
+						"do": "block",
+						"n": 2
+					},
+					{
+						"do": "power",
+						"kind": "strength",
+						"n": 1,
+						"target": "self",
+						"fight": false,
+						"if": {
+							"is": "firstTimeThisFight"
+						}
+					}
+				],
+				"art": {
+					"prop": "hammer",
+					"tint": "ember"
+				}
+			}
+		}
+	}
+}

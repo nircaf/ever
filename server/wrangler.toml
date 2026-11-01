@@ -20,14 +20,33 @@ class_name = "Room"
 tag = "v1"
 new_sqlite_classes = ["Room"]
 
+# World bot (major changes, docs/PLATFORM.md): one global WorldBot Durable Object holds the
+# proposal queue, rate limits and the open pull request.
+[[durable_objects.bindings]]
+name = "WORLD_BOT"
+class_name = "WorldBot"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["WorldBot"]
+
 [vars]
 PROTOCOL_VERSION = "1"
 # Origins allowed to open sockets / create rooms (comma list). Local dev origins
 # (localhost, 127.0.0.1, any port) are always allowed by the code.
 ALLOWED_ORIGINS = "https://game.dreamz.rest"
+# World bot. Off until the GitHub App and its secrets exist (docs/PLATFORM.md 2-4).
+# Secrets (never in this file): GH_APP_ID, GH_APP_PRIVATE_KEY, GH_APP_INSTALLATION_ID, BOT_IP_SALT
+WORLD_BOT_ENABLED = "false"
+GH_OWNER = "nircaf"
+GH_REPO = "ever"
+GH_BASE = "main"
+# "true" once Systems ships the win-replay verifier (GDD_V2 17.8); see docs/PLATFORM.md 3.4.
+WORLD_REQUIRE_REPLAY = "false"
 
 # Production routing: the Worker answers /room/* on the Pages custom domain, so the
 # browser talks same-origin (wss://game.dreamz.rest/room/<CODE>). Uncomment on deploy.
 # routes = [
-#   { pattern = "game.dreamz.rest/room/*", zone_name = "dreamz.rest" }
+#   { pattern = "game.dreamz.rest/room/*", zone_name = "dreamz.rest" },
+#   { pattern = "game.dreamz.rest/world/proposals*", zone_name = "dreamz.rest" }
 # ]

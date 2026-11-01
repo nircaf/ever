@@ -1,0 +1,20 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "ash-gate-cairn",
+	"themes": [
+		"ash"
+	],
+	"proposal": {
+		"kind": "place",
+		"data": {
+			"anchor": "gatePillarWest",
+			"prop": "cairn",
+			"inscription": "For the ones who went first."
+		}
+	}
+}

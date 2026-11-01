@@ -3,6 +3,8 @@
 **EVER — Evolving Virtual Experiences & Reincarnation**
 Owner: Creative Director. Status: MVP spec, the single source of truth. If code and this doc disagree, raise it; don't quietly pick one.
 
+> **v2 (2026-10-31):** seeded runs, one-card starts, generated mechanics and shared world changes are specified in `docs/GDD_V2.md`. That doc **extends** this one. Sections marked **v2:** below are replaced or changed there; everything unmarked still holds (Marcus's story, beats, free-text intents and AI validation, palette, tone, co-op seats and reconnect).
+
 License: the whole project is AGPL-3.0-or-later because the card combat reuses **Slay the Web** (oskarrough/slaytheweb, commit a108c3e, by Oskar Rough and contributors). Keep its copyright notices in the vendored files and credit it on the title screen and in `CREDITS` (copy in section 6).
 
 ---
@@ -17,6 +19,8 @@ License: the whole project is AGPL-3.0-or-later because the card combat reuses *
 
 MVP scope is fixed: **1 scene, 1 NPC, 4 stations, 1 enemy, 1 curse, 3 tokens**. One full read takes 8 to 12 minutes.
 
+> **v2:** replaced by GDD_V2 §0. A book starts with a seed and one keepsake card, follows an 8–10 page path (Marcus + up to 2 archetypes, stations, 3–4 fights), and takes 12–20 minutes.
+
 ---
 
 ## 1. The full loop
@@ -30,6 +34,8 @@ Book cover (title) ─► Chapter page ─► Ashbrook (RPG) ─► Ash Gate cir
 
 ### 1.1 Screens in order
 
+> **v2:** new screens (New book, Contents, Offer, Spoils, Hearth, Last Page, ledger) and changed cover/chapter/win/death: GDD_V2 §2.1 and §19.
+
 | # | Screen | What happens | Leaves via |
 |---|---|---|---|
 | 1 | **Book cover** | 3D closed book on a table, title "EVER", "Book N" under it (N = booksWritten + 1). If a remembered line exists, it is printed on the cover in italics. Buttons: Begin a new book, Host a game, Join a game. Small footer: AI status, credits link. | Begin, Host, Join |
@@ -39,9 +45,11 @@ Book cover (title) ─► Chapter page ─► Ashbrook (RPG) ─► Ash Gate cir
 | 5a | **Chapter complete** | Win screen. booksWritten +1, remembered line saved. Buttons: Begin a new book, Stay in Ashbrook. "Stay" returns to the village in epilogue state (Marcus has a final line, stations are spent, gate is open and empty). | Button |
 | 5b | **The book closes** | Death screen. booksWritten +1, remembered line saved. Button: Begin a new book. | Button |
 
-There is no save mid-book. Refreshing the page in solo closes the book quietly (counts as written). In co-op the room keeps your seat for reconnect (section 7).
+**v2:** books are now saved after every page and pinned to their engine and world edition (GDD_V2 §16). The MVP rule was: there is no save mid-book. Refreshing the page in solo closes the book quietly (counts as written). In co-op the room keeps your seat for reconnect (section 7).
 
 ### 1.2 What persists between books (localStorage, per browser)
+
+> **v2:** meta moves to `ever.v2.meta` and adds the death **echo** (GDD_V2 §15, §21). The remembered-line rules below still apply.
 
 Exactly two values, key `ever.v1.meta`:
 
@@ -63,6 +71,8 @@ Effects of persistence in play (small on purpose):
 
 ### 1.3 What resets every book
 
+> **v2:** the deck resets to one keepsake card (GDD_V2 §4), and items, curses, Marks and path twists also reset.
+
 Everything else: HP (50/50), deck (starter), tokens (none), Marcus trust (0) and conversation flags, all station uses, the Warden (full HP, intent cycle at step 1), the random seed for the Lectern offer.
 
 ---
@@ -81,6 +91,8 @@ Everything else: HP (50/50), deck (starter), tokens (none), Marcus trust (0) and
 | **What he can give** | Card upgrades at the anvil, the **Ember** token, a Doubt curse if you turn him against you. |
 
 ### 2.2 Trust
+
+> **v2:** trust now decides the size and rarity of Marcus's **offer** (GDD_V2 §10.1–10.2). The anvil opens the Offer panel instead of a fixed upgrade; the Ember gift and the Doubt at −2 stay. Attacking him also adds a Mark.
 
 Per player, integer **-3 to +3**, starts at **0** each book. HUD label under his name: -3/-2 "Cold", -1 "Wary", 0 "Guarded", +1 "Warm", +2/+3 "Trusting".
 
@@ -144,6 +156,8 @@ Cold: "We're finished." (only Leave and free text) / Wary: "Say what you came to
 **Epilogue line** (after a win, "Stay in Ashbrook"): trust ≥ 1: "You brought the hammer back. I'll hang it over the door." Otherwise: "It's done, then. Good."
 
 ### 2.4 "Try something else" (free text)
+
+> **v2:** a 9th intent, `request` (the player asks for something specific), steers the next offer and never changes trust (GDD_V2 §10.1). The 8 MVP intents and their rules table are unchanged and also apply to the Wayfarer and the Keeper with the per-NPC differences in GDD_V2 §10.3–10.4.
 
 Text input, max 120 characters, placeholder: *"e.g. I help him sweep the cold ash"*. Every submission is first classified into one of eight intents. Offline, the local classifier does it; with the bridge, the AI proposes it (2.5) and the same rules apply.
 
@@ -229,6 +243,8 @@ Co-op: the AI call is made by the talking player's own client (only that client 
 
 ## 3. Deck changes (RPG mode only)
 
+> **v2:** the rule "combat never changes the deck" still holds. Everything else in this section is extended by GDD_V2 §8–12: generated cards from building blocks, items, generated curses and tokens, spoils after fights, the Hearth. Stations keep their MVP roles but their card content is generated.
+
 Combat never adds, removes or upgrades cards permanently. Engine-side temporary changes inside a fight (exhaust, draw, discard) are thrown away when the fight ends.
 
 ### 3.1 Deck representation
@@ -236,6 +252,8 @@ Combat never adds, removes or upgrades cards permanently. Engine-side temporary 
 The book holds `deck: [{name: "Strike", upgraded: false}, ...]`. `name` is the Slay the Web card name, which the engine uses as its id (`createCard(name, upgraded)`). At combat start the deck is converted with `createCard`.
 
 ### 3.2 Starter deck (10 cards, = Slay the Web "Classic" deck)
+
+> **v2:** replaced. A book starts with **one keepsake card** chosen by the seed (GDD_V2 §4). Strike, Defend and Bash stay in the card pool.
 
 | Card (STW name) | Count | Cost | Effect | Upgraded |
 |---|---|---|---|---|
@@ -263,6 +281,8 @@ export const upgrade = (card) => card     // curses cannot be upgraded
 Engine changes required (Technical Director owns): register `doubt` in `cardIndex`; add condition `unplayable` → `false`; in `endTurn`, **before** `discardHand`, subtract 2 HP per Doubt in hand (ignores block). Doubt is excluded from upgrade pickers and from the Lectern pool.
 
 ### 3.4 Tokens
+
+> **v2:** tokens are spent at the **next** fight (the fight prompt lets you hold some back), and new token kinds may be generated (GDD_V2 §9.1). Still max 3, one of each kind.
 
 **A token is a one-shot charm you carry into the next fight.** You get them in the village; they are spent automatically at the start of combat. You can hold **at most one of each kind, so at most 3**. Tokens are shown in the HUD as three slots (empty slot = dim outline). Tokens are not cards and never enter the deck.
 
@@ -296,6 +316,8 @@ Press `Tab` / tap the deck icon in the HUD: shows the deck grouped by card with 
 ---
 
 ## 4. The one combat: the Ash Warden
+
+> **v2:** the Warden is now the **final** fight, with 120 HP (±8 per page), stronger intents, a theme aspect, a shadow twist and Marks (GDD_V2 §13). Ash Motes, Cinder Hound and Iron Husk are added (GDD_V2 §7). The MVP tuning table below is kept for reference only.
 
 Adapted from Slay the Web's Death Knight and Jaw Worm patterns. Built with the engine's `Monster({...})` and a one-node dungeon (same pattern as `createTestDungeon`). **No `random` property**: intents are fixed so tuning holds and players can learn the pattern.
 
@@ -336,6 +358,8 @@ Combat HUD copy is in section 6. One combat lasts 5 to 6 turns, about 4 minutes.
 ---
 
 ## 5. The map: Ashbrook clearing
+
+> **v2:** same map. Adds anchor sites (Road Fire, Wayfarer's Cart, Keeper's Bench, four fight rings), a gold bookmark ribbon over the current page, and marked anchors for world-change props (GDD_V2 §6.3, §14.2). The free discovery order below is replaced by the path's page order.
 
 One scene, about **64 x 64 units**, ringed by low-poly pines and a low stone wall so the player can't leave. Units are meters; the player capsule is 1.8 tall and walks at **6 u/s**. Coordinates: x east, z south (north = negative z), origin at the well.
 
@@ -404,6 +428,8 @@ Cards: flat paper rectangles with a colored top band by type (attack ember, skil
 ---
 
 ## 6. Copy (all on-screen strings)
+
+> **v2:** new and changed strings are in GDD_V2 §19. Everything below that GDD_V2 does not replace stays.
 
 Tone: plain, warm, short. Sentence case. No exclamation marks except the one in the win screen.
 
@@ -480,6 +506,8 @@ Free text: placeholder "e.g. I help him sweep the cold ash" · button "Do it" ·
 ---
 
 ## 7. Multiplayer (co-op party of 1 to 4)
+
+> **v2:** adds one seed per room, shared page progress, per-player vs shared changes, gifts, catch-up books, party Warden v2 HP and the final vote (GDD_V2 §17). The seat, reconnect, turn and death rules below are unchanged.
 
 Solo is the same game with a party of one, run locally with no server. Co-op uses a room on a Cloudflare Worker + Durable Object (one DO per room, WebSockets). The Technical Director picks the URL scheme and message format; the design requirements are below.
 
@@ -559,6 +587,8 @@ After a win, "Begin a new book" in co-op needs every connected player to vote (b
 ---
 
 ## 8. Build split (four engineers, one pass)
+
+> **v2:** see GDD_V2 §22.
 
 Suggested ownership, so pieces meet at clear seams:
 

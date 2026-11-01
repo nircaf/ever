@@ -17,7 +17,11 @@
     "test:bridge": "node test/smoke.mjs",
     "rooms": "wrangler dev --config server/wrangler.toml --port 8787",
     "start": "node bridge.mjs",
-    "test:rooms": "node server/test/rooms-integration.mjs"
+    "test:rooms": "node server/test/rooms-integration.mjs",
+    "check:world": "node game/src/platform/tools/check-world.mjs",
+    "check:blocks": "node game/src/mechanics/tools/check-blocks.mjs",
+    "world:add": "node game/src/platform/tools/world-add.mjs",
+    "bundle:report": "node game/src/platform/tools/bundle-report.mjs public --sources"
   },
   "dependencies": {
     "immer": "^10.2.0",

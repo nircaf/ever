@@ -7,6 +7,9 @@ public/
 # wrangler dev state
 .wrangler/
 server/.wrangler/
+# wrangler dev secrets (world bot GitHub App key)
+.dev.vars
+server/.dev.vars
 
 # local tool state
 .a5c/

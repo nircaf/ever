@@ -1,0 +1,22 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "crow-even-birds",
+	"themes": [
+		"crow"
+	],
+	"proposal": {
+		"kind": "line",
+		"data": {
+			"npc": "keeper",
+			"when": {
+				"theme": "crow"
+			},
+			"text": "Birds on the gate. Count them. Never trust an even number."
+		}
+	}
+}

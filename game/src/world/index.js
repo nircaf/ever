@@ -68,6 +68,9 @@ import {
 	yawOf,
 } from './nav.js'
 import {buildVillage} from './scene.js'
+import {buildSites, makeFoe} from './sites.js'
+import {SITES} from '../core/rules/path.js'
+import {siteOf} from '../core/rules/run.js'
 import {createWorldUi} from './ui.js'
 import {peerTag} from './guide.js'
 import {disposeIcons} from './card-art.js'
@@ -125,6 +128,18 @@ export function createWorld(el, ctx = {}) {
 	warden.position.set(COMBAT_STAGE.wardenDormant[0], 0, COMBAT_STAGE.wardenDormant[1])
 	warden.setPose('dormant')
 	scene.add(warden)
+
+	// v2 sites (GDD_V2 6.3): Wayfarer's cart, Keeper's bench, Road Fire, fight rings, ribbon
+	const sites = buildSites(scene)
+	/** v2 fight staging: the ring (or gate) of the current fight and the foe standing in it. */
+	let fightSite = null
+	let foe = null
+	const GATE_CENTER = STATIONS.gate.pos
+	const stageOffset = () => {
+		const p = fightSite && SITES[fightSite] && fightSite !== 'gate' ? SITES[fightSite].pos : null
+		return p ? [p[0] - GATE_CENTER[0], p[1] - GATE_CENTER[1]] : [0, 0]
+	}
+	const fighterActor = () => foe || warden
 
 	// click-to-move marker: a small dusk ring on the ground
 	const marker = makeGroundTile({radius: 0.32, sides: 6, colorKey: 'dusk', seed: 401, height: 0.04})
@@ -383,7 +398,14 @@ export function createWorld(el, ctx = {}) {
 		bookKey = key
 		book = b
 		const epi = b.status === 'epilogue'
-		for (const k of ['well', 'lectern', 'grindstone', 'shrine']) S[k].setUsed(epi || !!b.used?.[k])
+		if (b.v === 2 && b.path) {
+			// v2: done pages are dim, everything else stays calm (GDD_V2 6.3 wayfinding)
+			for (const k of ['well', 'lectern', 'grindstone', 'shrine']) S[k].setUsed(epi || b.path.pages.some((p, i) => p.station === k && i < b.page))
+			sites.sync(b, siteOf(b))
+		} else {
+			for (const k of ['well', 'lectern', 'grindstone', 'shrine']) S[k].setUsed(epi || !!b.used?.[k])
+			sites.sync(null, null)
+		}
 		const warm = (b.marcus?.trust ?? 0) >= 2 || !!b.marcus?.flags?.emberGiven
 		S.forge.setLanternLit(warm)
 		S.forge.setHearthLit(warm || (epi && (b.marcus?.trust ?? 0) >= 1))
@@ -532,7 +554,7 @@ export function createWorld(el, ctx = {}) {
 	const ndc = new THREE.Vector2()
 	const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 	const hit = new THREE.Vector3()
-	const pickables = [marcus, S.well, S.grindstone, S.lectern, S.shrine, S.forge, S.gate]
+	const pickables = [marcus, S.well, S.grindstone, S.lectern, S.shrine, S.forge, S.gate, ...sites.pickables]
 	S.forge.userData.pick = 'marcus'
 	for (const k of ['well', 'grindstone', 'lectern', 'shrine', 'gate']) S[k].userData.pick = k
 
@@ -636,23 +658,28 @@ export function createWorld(el, ctx = {}) {
 		return COMBAT_STAGE.players[Math.max(0, Math.min(3, seat))]
 	}
 	function stageActors() {
-		const wp = COMBAT_STAGE.warden
-		warden.visible = true
-		warden.position.set(wp[0], 0, wp[1])
+		const [ox, oz] = stageOffset()
+		const wp = [COMBAT_STAGE.warden[0] + ox, COMBAT_STAGE.warden[1] + oz]
+		const enemy = fighterActor()
+		if (enemy !== warden) warden.visible = false
+		enemy.visible = true
+		enemy.position.set(wp[0], heightAt(wp[0], wp[1]), wp[1])
 		const fighters = [[mySeat, player]]
 		for (const [seat, p] of peers) if (p.inFight) fighters.push([seat, p.char])
 		let cx = 0
 		let cz = 0
 		for (const [seat, char] of fighters) {
-			const [x, z] = slotOf(seat)
-			char.position.set(x, 0, z)
+			const [x0, z0] = slotOf(seat)
+			const x = x0 + ox
+			const z = z0 + oz
+			char.position.set(x, heightAt(x, z), z)
 			char.faceTowards(wp[0], wp[1])
 			char.setWalking(false)
 			cx += x / fighters.length
 			cz += z / fighters.length
 		}
-		warden.rotation.y = Math.atan2(cx - wp[0], cz - wp[1])
-		warden.setPose('idle')
+		enemy.rotation.y = Math.atan2(cx - wp[0], cz - wp[1])
+		enemy.setPose?.('idle')
 	}
 
 	function setStage(next) {
@@ -666,15 +693,24 @@ export function createWorld(el, ctx = {}) {
 			moveTarget.clear()
 			marker.visible = false
 			makeFog(scene, 'combat')
-			camAnim = {t: 0, from: {position: camera.position.clone(), target: look.clone()}}
-			gateOpenTarget = 1
+			const [ox, oz] = stageOffset()
+			// The shot is the gate shot moved to the ring: start from the explore pose in that frame.
+			const off = new THREE.Vector3(ox, 0, oz)
+			camAnim = {t: 0, off, from: {position: camera.position.clone().sub(off), target: look.clone().sub(off)}}
+			if (!ox && !oz) gateOpenTarget = 1
 			stageActors()
-			rig.follow(-0.5, -22.5)
+			rig.follow(-0.5 + ox, -22.5 + oz)
 		} else {
 			camAnim = null
 			makeFog(scene, 'explore')
 			camera.fov = CAMERA.explore.fov
 			camera.updateProjectionMatrix()
+			if (foe) {
+				scene.remove(foe)
+				freeObject(foe)
+				foe = null
+			}
+			fightSite = null
 			if (Math.hypot(me.x - STATIONS.gate.pos[0], me.z - STATIONS.gate.pos[1]) < STATIONS.gate.radius + 1.5) teleport(...AFTER_FIGHT)
 			range = null
 			placePlayer()
@@ -833,6 +869,8 @@ export function createWorld(el, ctx = {}) {
 		updateMarcus(dt)
 		player.update(clock, dt)
 		warden.update(clock, dt)
+		foe?.update(clock, dt)
+		sites.update(clock, dt)
 		S.grindstone.update(clock, dt)
 		S.shrine.update(clock, dt)
 		S.gate.update(clock, dt)
@@ -845,6 +883,7 @@ export function createWorld(el, ctx = {}) {
 		} else if (stage === 'combat' && camAnim) {
 			camAnim.t = Math.min(1, camAnim.t + dt / MOTION.combatCameraMove)
 			frameCombat(camera, camera.aspect, camAnim.t, camAnim.from)
+			if (camAnim.off) camera.position.add(camAnim.off)
 			if (shakeT > 0) {
 				shakeT = Math.max(0, shakeT - dt)
 				const a = shakeAmt * (shakeT / shakeDur)
@@ -862,10 +901,11 @@ export function createWorld(el, ctx = {}) {
 		sky.position.copy(camera.position)
 		if (!cover.on) {
 			if (stage === 'combat') {
+				const [ox, oz] = stageOffset()
 				const wp = COMBAT_STAGE.warden
-				focusPts[0].set(wp[0], 1.6, wp[1])
-				focusPts[1].set(COMBAT_STAGE.players[0][0], 1, COMBAT_STAGE.players[0][1])
-				focusPts[2].set(COMBAT_STAGE.players[3][0], 1, COMBAT_STAGE.players[3][1])
+				focusPts[0].set(wp[0] + ox, 1.6, wp[1] + oz)
+				focusPts[1].set(COMBAT_STAGE.players[0][0] + ox, 1, COMBAT_STAGE.players[0][1] + oz)
+				focusPts[2].set(COMBAT_STAGE.players[3][0] + ox, 1, COMBAT_STAGE.players[3][1] + oz)
 			} else {
 				focusPts[0].set(me.x, heightAt(me.x, me.z) + 1.1, me.z)
 				focusPts[1].set(me.x, 0.3, me.z)
@@ -929,7 +969,25 @@ export function createWorld(el, ctx = {}) {
 		getPlayerPos: () => ({x: me.x, z: me.z, yaw: me.yaw}),
 		upsertPeer,
 		removePeer,
-		getWardenActor: () => warden,
+		getWardenActor: () => fighterActor(),
+		/**
+		 * v2: where the next fight is staged and who stands in it. Call before
+		 * modes.startCombat(). site: a ring id from core/rules/path.js SITES or 'gate';
+		 * foe: 'motes' | 'hound' | 'husk' | 'warden'. Cleared when the stage returns to explore.
+		 */
+		setFight({site = 'gate', foe: kind = 'warden'} = {}) {
+			if (stage === 'combat') return
+			fightSite = SITES[site] ? site : 'gate'
+			if (foe) {
+				scene.remove(foe)
+				freeObject(foe)
+			}
+			foe = kind && kind !== 'warden' ? makeFoe(kind) : null
+			if (foe) {
+				foe.visible = false
+				scene.add(foe)
+			}
+		},
 		getPartyActor: (seat) => (seat === mySeat || (!getNet() && seat === 0) ? player : peers.get(seat)?.char || null),
 		teleport,
 		/** co-op: hand the world the NetClient once Host/Join succeeded (null when leaving) */

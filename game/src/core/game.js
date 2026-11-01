@@ -8,13 +8,24 @@
 // Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {CLOSE, EV, MSG, SPAWN, STATIONS, cleanName, inStationRange, loadName, saveName} from './contracts.js'
-import {createAiController} from './ai.js'
+import {createAiController} from './ai/index.js'
 import {COPY} from './copy.js'
 import {hintFor} from './rules/book.js'
 import {createToaster, h, sleep} from './ui/dom.js'
 import {createHud} from './ui/hud.js'
 import {createPanels} from './ui/panels.js'
 import {chapterScreen, coverScreen, creditsModal, deathScreen, hostScreen, joinScreen, winScreen} from './ui/screens.js'
+// v2 seeded books (GDD_V2)
+import './ui/run.css'
+import {BOOK_V2, WORLD_EDITION_FALLBACK} from './contracts.js'
+import {COPY2} from './copy-v2.js'
+import {createMomentSession, runWorldProposals} from './ai/index.js'
+import {currentPage, isV2, parseSavedBook} from './rules/run.js'
+import {formatSeed, parseSeedInput, randomSeed} from './rules/seed.js'
+import {createRunPanels} from './ui/run-panels.js'
+import {chapterScreenV2, ledgerModal, newBookScreen} from './ui/run-screens.js'
+import {createRunFlow} from './run-flow.js'
+import {ENGINE_VERSION, checkPin, createWorldBotClient, createWorldLoader} from '../platform/index.js'
 
 const TALK_STATIONS = ['marcus', 'well', 'grindstone', 'lectern', 'shrine']
 const ALIASES = {forge: 'marcus', anvil: 'marcus'}
@@ -52,11 +63,87 @@ export function createGame({els, world, modes, store, bus, session}) {
 	})
 	const panels = createPanels({root: panelSlot, store, ai, toast})
 	const hud = createHud(hudSlot, {
-		onDeck: () => panels.openDeck(),
+		onDeck: () => openDeck(),
 		onPrompt: () => interact(near),
 		onCopyCode: copyCode,
 		onLeave: () => leaveCoop(),
+		onContents: () => isV2(store.get()) && runPanels.openContents(),
 	})
+
+	// ---- v2: world edition, AI moments, panels and the page flow ---------------------
+	const worldInfo = {edition: WORLD_EDITION_FALLBACK, ledger: [], names: [], latest: null}
+	const worldLoader = (() => {
+		try {
+			return createWorldLoader()
+		} catch {
+			return null
+		}
+	})()
+	worldLoader
+		?.manifest()
+		.then((m) => {
+			if (!m) return
+			worldInfo.edition = Number.isInteger(m.edition) ? m.edition : worldInfo.edition
+			worldInfo.latest = worldInfo.edition
+			worldInfo.ledger = Array.isArray(m.ledger) ? m.ledger : []
+			worldInfo.names = Array.isArray(m.names) ? m.names : []
+			if (screenSlot.querySelector('.ever-cover')) showCover()
+		})
+		.catch(() => {})
+	const moments = (() => {
+		try {
+			const ms = createMomentSession({transport: ai.transport ?? null, isActive: () => ai.isActive(store.get())})
+			return {request: (ctx) => ms.request(ctx), cancel: () => ms.cancel(), active: () => Boolean(ai.transport?.enabled) && ai.isActive(store.get())}
+		} catch {
+			return null
+		}
+	})()
+	const runPanels = createRunPanels({panels, store, toast, moments})
+	panels.hooks.onOffer = (o) => runPanels.openOffer(o)
+	const bot = createWorldBotClient()
+	/** Send a chosen world change to the bot endpoint (platform); never throws. */
+	async function submitWorldChange(payload) {
+		try {
+			const reply = await bot.submit(payload)
+			const line = bot.statusLine(reply)
+			const watch = reply?.id && (line.state === 'open' || line.state === 'queued')
+				? (fn) => {
+						let n = 0
+						const poll = async () => {
+							if (++n > 40) return
+							const r = await bot.status(reply.id)
+							const l = bot.statusLine(r)
+							fn(l)
+							if (l.state === 'open' || l.state === 'queued') setTimeout(poll, 15_000)
+						}
+						setTimeout(poll, 15_000)
+					}
+				: null
+			return {...line, watch}
+		} catch {
+			return {state: 'offline', copy: COPY2.last.status.offline}
+		}
+	}
+	const flow = createRunFlow({
+		world,
+		store,
+		hud,
+		panels,
+		runPanels,
+		toast,
+		session,
+		ai,
+		COPY,
+		setScreen: (el) => setScreen(el),
+		getRoom: () => room,
+		isCombatRunning: () => combatRunning,
+		startSoloFight: () => startSoloFight(),
+		openLobby: () => openLobby(),
+		runWorldProposals,
+		submitWorldChange,
+		worldNames: () => worldInfo.names,
+	})
+	const openDeck = () => (isV2(store.get()) ? runPanels.openDeck() : panels.openDeck())
 
 	const setScreen = (el) => screenSlot.replaceChildren(...(el ? [el] : []))
 	const fadeTo = async (on) => {
@@ -104,13 +191,13 @@ export function createGame({els, world, modes, store, bus, session}) {
 	const refreshHud = () => {
 		const book = store.get()
 		hud.update(book)
-		hud.setHint(hintFor(book, Date.now()))
+		if (book.v !== BOOK_V2) hud.setHint(hintFor(book, Date.now())) // v2: run-flow sets the hint
 	}
 	const keyOf = (b) => `${b.bookNo}:${b.seed}`
 
 	store.subscribe((book, effects) => {
 		hud.update(book)
-		hud.setHint(hintFor(book, Date.now()))
+		if (book.v !== BOOK_V2) hud.setHint(hintFor(book, Date.now()))
 		try {
 			world.syncBook(book)
 		} catch (err) {
@@ -138,9 +225,35 @@ export function createGame({els, world, modes, store, bus, session}) {
 		stopLoop()
 		world.show()
 		world.setCover?.(true) // the closed 3D book on its table (ART_BIBLE 5)
+		// v2: "Continue Book N" when a saved book is still playable, and the edition line.
+		const saved = store.savedBook?.()
+		let top = null
+		if (saved && !saved.unusable) {
+			const pin = checkPin({engine: saved.engine, edition: saved.edition}, {latestEdition: worldInfo.latest})
+			if (pin.ok)
+				top = h(
+					'button',
+					{type: 'button', class: 'ever-btn ever-btn--primary ever-cover__continue', 'data-testid': 'continue', onclick: () => continueBook(pin)},
+					COPY2.cover.continue(saved.bookNo),
+					h('small', {text: COPY2.cover.continueSmall(Math.min(saved.page + 1, saved.path.L), saved.path.L, formatSeed(saved.seed))}),
+				)
+			else {
+				store.closeUnfinished(saved)
+				queueMicrotask(() => toast(pin.copy ?? COPY2.versions.gone))
+			}
+		} else if (saved?.unusable) store.closeUnfinished(saved.raw)
+		const below = h(
+			'p',
+			{class: 'ever-cover__edition ever-muted'},
+			COPY2.cover.edition(worldInfo.edition),
+			' · ',
+			h('a', {href: '#changes', onclick: (e) => (e.preventDefault(), panelSlot.append(ledgerModal({ledger: worldInfo.ledger, onClose: () => panelSlot.querySelector('.ever-modal')?.remove()})))}, COPY2.cover.whatChanged),
+		)
 		const cover = coverScreen({
 			meta: store.getMeta(),
 			ai,
+			top,
+			below,
 			onSolo: startSolo,
 			onHost: showHost,
 			onJoin: showJoin,
@@ -156,7 +269,8 @@ export function createGame({els, world, modes, store, bus, session}) {
 
 	function playChapterPage() {
 		return new Promise((resolve) => {
-			const ch = chapterScreen({
+			const b = store.get()
+			const ch = isV2(b) ? chapterScreenV2({book: b, onDone: () => (setScreen(null), resolve())}) : chapterScreen({
 				onDone: () => {
 					setScreen(null)
 					resolve()
@@ -167,10 +281,43 @@ export function createGame({els, world, modes, store, bus, session}) {
 	}
 
 	// ---- books --------------------------------------------------------------------
-	async function startSolo() {
+	/** Solo: the New book screen (seed, preview), then the book (GDD_V2 2.1 #2). */
+	function startSolo(initial = '') {
 		session.net = null
-		store.openNewBook()
+		const meta = store.getMetaV2()
+		setScreen(
+			newBookScreen({
+				edition: worldInfo.edition,
+				echo: meta.echo,
+				cleanReads: meta.cleanReads,
+				initial,
+				onBegin: ({code, edition}) => beginV2(code, edition),
+				onBack: showCover,
+				onCopy: copyText,
+				onCleanReads: (on) => store.setCleanReads(on),
+			}).el,
+		)
+	}
+	async function beginV2(code, edition) {
+		session.net = null
+		store.openNewBook({seed: code, edition, engine: ENGINE_VERSION})
+		flow.reset()
 		await startBookFlow({fresh: true, chapter: true})
+	}
+	async function continueBook(pin) {
+		const b = store.continueBook()
+		if (!b) return showCover()
+		flow.reset()
+		if (pin?.state === 'older_edition' && pin.copy) queueMicrotask(() => toast(pin.copy))
+		await startBookFlow({fresh: true, chapter: false})
+	}
+	async function copyText(text) {
+		try {
+			await navigator.clipboard.writeText(text)
+			toast(COPY2.newBook.copied, 'good')
+		} catch {
+			toast(text)
+		}
 	}
 
 	/** Chapter page (optional) then the village. */
@@ -180,6 +327,8 @@ export function createGame({els, world, modes, store, bus, session}) {
 		await world.openBook?.() // the cover opens (no-op when the cover is not up)
 		if (chapter) await playChapterPage()
 		await enterVillage({fresh})
+		// v2: the Contents shows once at the start (4 s or a click), then on C / the Page pill.
+		if (chapter && isV2(store.get())) runPanels.openContents({auto: true})
 	}
 
 	async function enterVillage({fresh = true} = {}) {
@@ -214,6 +363,14 @@ export function createGame({els, world, modes, store, bus, session}) {
 		tickN++
 		const p = world.getPlayerPos()
 		const book = store.get()
+
+		if (isV2(book)) {
+			flow.tick(p, book, {panelsOpen: panels.isOpen || Boolean(screenSlot.firstChild)})
+			near = flow.near
+			if (tickN % 10 === 0 && isCoop() && room?.phase === 'epilogue') updateVotes()
+			shareMove(p)
+			return
+		}
 
 		// nearest interactable in range
 		let best = null
@@ -255,7 +412,11 @@ export function createGame({els, world, modes, store, bus, session}) {
 			if (isCoop() && room?.phase === 'epilogue') updateVotes() // e.g. a vote came in while a page was up
 		}
 
-		// co-op: share my position (the client throttles to 10 Hz; only send changes)
+		shareMove(p)
+	}
+
+	/** co-op: share my position (the client throttles to 10 Hz; only send changes) */
+	function shareMove(p) {
 		if (session.net && session.net.status === 'open') {
 			const moved = !lastSent || Math.hypot(p.x - lastSent.x, p.z - lastSent.z) > 0.02 || Math.abs(p.yaw - lastSent.yaw) > 0.02
 			const walking = Boolean(lastSent) && Math.hypot(p.x - lastSent.x, p.z - lastSent.z) > 0.02
@@ -267,8 +428,9 @@ export function createGame({els, world, modes, store, bus, session}) {
 	}
 
 	function interact(id) {
-		id = ALIASES[id] || id
 		if (!id || modes.mode !== 'world' || panels.isOpen) return
+		if (flow.interact(id)) return
+		id = ALIASES[id] || id
 		if (id === 'gate') return
 		const p = world.getPlayerPos()
 		if (!TALK_STATIONS.includes(id) || !inStationRange(id, p.x, p.z, 1)) return
@@ -286,7 +448,10 @@ export function createGame({els, world, modes, store, bus, session}) {
 			if (near) interact(near)
 		} else if (e.key === 'Tab' && modes.mode === 'world' && !panels.isOpen) {
 			e.preventDefault()
-			panels.openDeck()
+			openDeck()
+		} else if ((e.key === 'c' || e.key === 'C') && modes.mode === 'world' && !panels.isOpen && isV2(store.get()) && !screenSlot.firstChild) {
+			e.preventDefault()
+			runPanels.openContents()
 		} else if (e.key === 'Escape' && panels.isOpen) panels.close()
 	})
 
@@ -319,7 +484,10 @@ export function createGame({els, world, modes, store, bus, session}) {
 		panels.close()
 		try {
 			await fadeTo(true)
-			const p = modes.startCombat({enemyId: 'ashWarden'})
+			const b = store.get()
+			// v2: the page's enemy, staged at its ring (or the gate for the final fight)
+			const enemyId = isV2(b) ? flow.stageFight(b) : 'ashWarden'
+			const p = modes.startCombat({enemyId})
 			p.catch(() => {}) // surfaced below, when awaited
 			await sleep(60)
 			fadeTo(false)
@@ -354,8 +522,31 @@ export function createGame({els, world, modes, store, bus, session}) {
 			return
 		}
 		store.finishCombat(result)
+		if (isV2(fought)) return afterFightV2({fought, result, coop: false})
 		if (result.won) await showWin({fought, result, coop: false})
 		else await showDeath({fought, result, coop: false})
+	}
+
+	/** v2: after any fight. Skirmish/elite win: back to the village (Spoils open there). */
+	async function afterFightV2({fought, result, coop}) {
+		const book = store.get()
+		const final = currentPage(fought)?.type === 'final'
+		if (result.won && final) {
+			await backToVillage(null)
+			if (coop) hud.show()
+			await flow.showLastPage({book: coop ? fought : book, coop, canSend: !coop || isLeadSeat()})
+			return showWin({fought: coop ? fought : book, result, coop, skipFade: true})
+		}
+		if (!result.won && (result.dead || !coop)) return showDeath({fought, result, coop})
+		await backToVillage(null)
+		hud.show()
+		refreshHud()
+		startLoop()
+	}
+	/** Co-op: the lowest connected seat sends the room's world change (GDD_V2 17.7, until the room vote ships). */
+	function isLeadSeat() {
+		const c = (room?.seats ?? []).filter((x) => x.connected).map((x) => x.seat)
+		return !c.length || Math.min(...c) === mySeat
 	}
 
 	async function startCoopFight() {
@@ -380,14 +571,18 @@ export function createGame({els, world, modes, store, bus, session}) {
 			toast(roomErrorText('network'), 'bad')
 			return
 		}
+		if (isV2(fought)) {
+			if ((result.won && currentPage(fought)?.type === 'final') || result.dead) store.closeBook({won: result.won, dead: result.dead ?? !result.won}, fought)
+			return afterFightV2({fought, result, coop: true})
+		}
 		store.closeBook({won: result.won, dead: result.dead ?? !result.won}, fought)
 		if (result.won) await showWin({fought, result, coop: true})
 		else await showDeath({fought, result, coop: true})
 	}
 
-	async function showWin({fought, result, coop}) {
+	async function showWin({fought, result, coop, skipFade = false}) {
 		const hp = result.hpLeft ?? store.get().hp
-		const turns = result.turns ?? store.get().stats.turns
+		const turns = isV2(fought) ? store.get().stats?.turns ?? result.turns : result.turns ?? store.get().stats.turns
 		winShown = true
 		coopWon = coop
 		const ctl = winScreen({
@@ -395,6 +590,7 @@ export function createGame({els, world, modes, store, bus, session}) {
 			turns,
 			hp,
 			coop,
+			stat: isV2(fought) ? flow.winStat(fought, turns, hp) : null,
 			onNew: () => {
 				if (coop && session.net) session.net.send(MSG.VOTE, {newBook: true})
 				else {
@@ -419,7 +615,8 @@ export function createGame({els, world, modes, store, bus, session}) {
 		})
 		winCtl = coop ? ctl : null
 		if (coop && room) updateVotes()
-		await backToVillage(ctl.el)
+		if (skipFade) setScreen(ctl.el)
+		else await backToVillage(ctl.el)
 		if (coop) {
 			hud.show()
 			hud.update(store.get())
@@ -428,11 +625,15 @@ export function createGame({els, world, modes, store, bus, session}) {
 
 	async function showDeath({fought, result, coop}) {
 		const line = store.getMeta().rememberedLine
+		const v2 = isV2(fought)
 		const ctl = deathScreen({
 			bookNo: fought.bookNo,
 			turn: result.turns ?? 1,
 			line,
 			coop,
+			stat: v2 ? flow.deathStat(fought) : null,
+			extra: v2 ? flow.echoLine(store.getMetaV2()) : null,
+			onAgain: v2 && !coop ? () => (setScreen(null), startSolo(formatSeed(fought.seed))) : null,
 			onNew: () => {
 				setScreen(null)
 				// co-op: the room already gave this seat a fresh book; if the room is gone, solo.
@@ -445,14 +646,39 @@ export function createGame({els, world, modes, store, bus, session}) {
 	}
 
 	// ---- multiplayer ----------------------------------------------------------------
+	let hostSeed = null
+	function hostSeedRow() {
+		hostSeed = h('input', {class: 'ever-input', id: 'ever-host-seed', type: 'text', maxlength: 32, autocomplete: 'off', placeholder: COPY2.newBook.placeholder, 'data-testid': 'host-seed'})
+		for (const t of ['keydown', 'keyup', 'keypress']) hostSeed.addEventListener(t, (e) => e.stopPropagation())
+		return h('div', {}, h('label', {class: 'ever-label', for: 'ever-host-seed', style: 'margin-top:12px', text: COPY2.newBook.seed}), hostSeed)
+	}
+
+	/** Co-op lobby for the current page's fight (rings and the gate). */
+	function openLobby() {
+		gateCtl = panels.openGateCoop({
+			onReady: (ready) => session.net?.send(MSG.GATE, {ready}),
+			onLeave: () => {
+				gateCtl = null
+			},
+		})
+		if (room) gateCtl.refresh(room, mySeat)
+	}
+
 	function showHost() {
 		setScreen(
 			hostScreen({
 				name: loadName(),
 				onHost: async (name) => {
 					const res = await connectCoop('host', {name})
+					// v2: one seed per room (GDD_V2 17.1), from the seed field (random when empty)
+					const r = parseSeedInput(hostSeed.value)
+					const seed = r.ok ? r.code : randomSeed()
+					try {
+						await session.net?.request(MSG.ACT, {a: {type: 'room.seed', seed, edition: worldInfo.edition}})
+					} catch {}
 					return res
 				},
+				extra: hostSeedRow(),
 				onEnter: () => startBookFlow({fresh: true}),
 				onBack: showCover,
 				onCopy: copyCode,
@@ -586,13 +812,16 @@ export function createGame({els, world, modes, store, bus, session}) {
 		if (r.phase === 'fighting' && mine?.inFight && !combatRunning && modes.mode !== 'combat') startCoopFight()
 
 		if (r.warden?.state === 'dormant') winShown = false
-		if (prevPhase === 'fighting' && r.phase === 'village' && r.warden?.state !== 'defeated' && !combatRunning) toast(COPY.death.partyLost)
+		if (prevPhase === 'fighting' && r.phase === 'village' && r.warden?.state !== 'defeated' && !combatRunning && !isV2(store.get())) toast(COPY.death.partyLost)
 		if (r.warden?.state === 'defeated' && !winShown && !combatRunning && modes.mode === 'world' && store.get().status !== 'dead') {
 			// the party won while I was walking around (or had already fallen): chapter complete for everyone
 			const book = store.get()
 			store.closeBook({won: true, dead: false})
 			panels.close()
-			showWin({fought: book, result: {won: true, hpLeft: book.hp, turns: book.stats.turns}, coop: true})
+			if (isV2(book)) {
+				winShown = true
+				flow.showLastPage({book, coop: true, canSend: isLeadSeat()}).then(() => showWin({fought: book, result: {won: true, hpLeft: book.hp, turns: book.stats.turns}, coop: true, skipFade: true}))
+			} else showWin({fought: book, result: {won: true, hpLeft: book.hp, turns: book.stats.turns}, coop: true})
 		}
 		prevPhase = r.phase
 	}

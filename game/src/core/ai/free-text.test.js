@@ -1,8 +1,8 @@
 // AI client: strict validation of model output, offline by default, 20 s timeout, fallback.
 // Copyright (C) 2026 the EVER contributors. SPDX-License-Identifier: AGPL-3.0-or-later
 import {afterEach, describe, expect, it, vi} from 'vitest'
-import {AI_INSTRUCTIONS, AI_TIMEOUT_MS, BRIDGE_ORIGIN, buildAiInput, createBridgeClient, newBook, validateAiProposal} from './contracts.js'
-import {createAiController, proposeFreeText} from './ai.js'
+import {AI_INSTRUCTIONS, AI_TIMEOUT_MS, BRIDGE_ORIGIN, buildAiInput, createBridgeClient, newBook, validateAiProposal} from '../contracts.js'
+import {createAiController, proposeFreeText} from './free-text.js'
 
 afterEach(() => vi.useRealTimers())
 

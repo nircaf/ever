@@ -1,0 +1,41 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "bargain-lucky-coin",
+	"themes": [
+		"bargain"
+	],
+	"proposal": {
+		"kind": "item",
+		"data": {
+			"def": {
+				"v": 1,
+				"kind": "item",
+				"name": "Lucky Coin",
+				"flavor": "Heads you keep it, tails you keep it anyway.",
+				"rarity": "common",
+				"slot": "charm",
+				"bound": false,
+				"triggers": [
+					{
+						"on": "fightStart",
+						"effects": [
+							{
+								"do": "block",
+								"n": 6
+							}
+						]
+					}
+				],
+				"art": {
+					"prop": "coin",
+					"tint": "gold"
+				}
+			}
+		}
+	}
+}

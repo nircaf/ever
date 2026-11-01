@@ -14,7 +14,7 @@ const screen = (page, extra = '') => h('div', {class: `ever-screen ${extra}`.tri
  * way; an unreachable server explains itself when you try).
  * @param {{meta: {booksWritten: number, rememberedLine: string}, ai: any, onSolo: () => void, onHost: () => void, onJoin: () => void, onCredits: () => void}} o
  */
-export function coverScreen({meta, ai, onSolo, onHost, onJoin, onCredits}) {
+export function coverScreen({meta, ai, onSolo, onHost, onJoin, onCredits, top = null, below = null, soloLabel = COPY.begin}) {
 	const aiLine = h('span', {class: 'ever-cover__ai'})
 	const paintAi = () => {
 		if (!ai.enabled) {
@@ -35,10 +35,12 @@ export function coverScreen({meta, ai, onSolo, onHost, onJoin, onCredits}) {
 		h('h1', {class: 'ever-title', text: COPY.title}),
 		h('p', {class: 'ever-display ever-cover__book', text: COPY.book(meta.booksWritten + 1)}),
 		meta.rememberedLine ? h('p', {class: 'ever-page__quote', text: `“${meta.rememberedLine}”`}) : null,
+		below, // v2: edition line ("Ashbrook, edition 14 · What changed")
 		h(
 			'div',
 			{class: 'ever-cover__buttons'},
-			btn(COPY.begin, onSolo, 'ever-btn--primary', {autofocus: true, 'data-testid': 'solo'}),
+			top, // v2: "Continue Book N"
+			btn(soloLabel, onSolo, top ? '' : 'ever-btn--primary', {autofocus: top ? null : true, 'data-testid': 'solo'}),
 			btn(COPY.host, onHost, '', {'data-testid': 'host'}),
 			btn(COPY.join, onJoin, '', {'data-testid': 'join'}),
 		),
@@ -83,7 +85,7 @@ export function chapterScreen({onDone}) {
  * Chapter complete. Co-op: the "begin" button becomes a vote and shows the count.
  * @param {{bookNo: number, turns: number, hp: number, coop: boolean, onNew: () => void, onStay: () => void}} o
  */
-export function winScreen({bookNo, turns, hp, coop, onNew, onStay}) {
+export function winScreen({bookNo, turns, hp, coop, onNew, onStay, stat = null}) {
 	const newBtn = btn(COPY.win.begin, () => {
 		newBtn.disabled = true
 		if (coop) newBtn.textContent = COPY.win.waiting
@@ -95,7 +97,7 @@ export function winScreen({bookNo, turns, hp, coop, onNew, onStay}) {
 		h('h2', {text: COPY.win.heading}),
 		h('p', {text: COPY.win.body}),
 		h('p', {class: 'ever-muted', text: COPY.win.second}),
-		h('p', {class: 'ever-page__stat', text: COPY.win.stat(bookNo, turns, hp)}),
+		h('p', {class: 'ever-page__stat', text: stat ?? COPY.win.stat(bookNo, turns, hp)}),
 		h('div', {class: 'ever-panel__actions'}, newBtn, btn(COPY.win.stay, onStay, '', {'data-testid': 'stay'})),
 	)
 	const el = screen(page)
@@ -111,16 +113,17 @@ export function winScreen({bookNo, turns, hp, coop, onNew, onStay}) {
 }
 
 /** The book closes. @param {{bookNo: number, turn: number, line: string, coop: boolean, onNew: () => void}} o */
-export function deathScreen({bookNo, turn, line, coop, onNew}) {
+export function deathScreen({bookNo, turn, line, coop, onNew, stat = null, extra = null, onAgain = null}) {
 	const page = h(
 		'section',
 		{class: 'ever-page ever-page--dead', role: 'dialog', 'aria-label': COPY.death.heading},
 		h('h2', {text: COPY.death.heading}),
 		h('p', {text: COPY.death.body}),
 		coop ? h('p', {class: 'ever-muted', text: COPY.death.coop}) : null,
-		h('p', {class: 'ever-page__stat', text: COPY.death.stat(bookNo, turn)}),
+		h('p', {class: 'ever-page__stat', text: stat ?? COPY.death.stat(bookNo, turn)}),
 		line ? h('p', {class: 'ever-page__quote'}, COPY.death.remember + ' ', h('em', {text: line})) : null,
-		h('div', {class: 'ever-panel__actions'}, btn(COPY.death.begin, onNew, 'ever-btn--primary', {autofocus: true, 'data-testid': 'new-book'})),
+		extra, // v2: "The next book will carry an echo: {card}."
+		h('div', {class: 'ever-panel__actions'}, btn(COPY.death.begin, onNew, 'ever-btn--primary', {autofocus: true, 'data-testid': 'new-book'}), onAgain ? btn('Read this seed again', onAgain, '', {'data-testid': 'again'}) : null),
 	)
 	return screen(page)
 }
@@ -146,7 +149,7 @@ export function creditsModal({onClose}) {
  * string error key of COPY.mp.errors.
  * @param {{name: string, onHost: (name: string) => Promise<{code: string}>, onEnter: () => void, onBack: () => void, onCopy: (code: string) => void, errorText: (e: any) => string, cleanName: (s: string) => string}} o
  */
-export function hostScreen({name, onHost, onEnter, onBack, onCopy, errorText, cleanName}) {
+export function hostScreen({name, onHost, onEnter, onBack, onCopy, errorText, cleanName, extra = null}) {
 	const input = isolateKeys(h('input', {class: 'ever-input', id: 'ever-host-name', type: 'text', maxlength: NAME_MAX, value: name, autocomplete: 'nickname'}))
 	const err = h('p', {class: 'ever-error', role: 'alert', hidden: true})
 	const go = btn(COPY.host, async () => {
@@ -173,6 +176,7 @@ export function hostScreen({name, onHost, onEnter, onBack, onCopy, errorText, cl
 		body.replaceChildren(
 			h('label', {class: 'ever-label', for: 'ever-host-name', text: COPY.mp.hostName}),
 			input,
+			extra, // v2: the room's seed field
 			err,
 			h('div', {class: 'ever-panel__actions', style: 'margin-top:16px;justify-content:center'}, go, btn(COPY.mp.back, onBack, 'ever-btn--quiet')),
 		)

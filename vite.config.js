@@ -2,14 +2,26 @@
 // root = game/ (source), output = public/ (served by bridge.mjs, deployed to Cloudflare Pages).
 import {fileURLToPath} from 'node:url'
 import {defineConfig} from 'vite'
+import {everWorld} from './game/src/platform/tools/vite-world.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 const ROOMS_DEV = process.env.EVER_ROOMS_URL || 'http://127.0.0.1:8787'
+
+// Long-lived vendor chunks (docs/PLATFORM.md 6): three and the card engine change far less
+// often than the game code, so a redeploy usually re-downloads only the small app chunk.
+function manualChunks(id) {
+	const p = id.split('\\').join('/')
+	if (p.includes('/node_modules/three/')) return 'three'
+	if (p.includes('/node_modules/immer/') || p.includes('/vendor/slaytheweb/src/') || p.includes('/game/src/combat/rules/') || p.includes('/game/src/mechanics/')) return 'engine'
+	return undefined
+}
 
 export default defineConfig({
 	root: 'game',
 	base: './', // relative asset URLs: works at game.dreamz.rest/ and at http://127.0.0.1:1455/
 	publicDir: 'static', // game/static/** is copied verbatim (e.g. _headers, favicon.svg, CREDITS.txt)
+	// world/ -> public/world/{manifest.json, f/<hash>.json}, public/version.json, __EVER_ENGINE__ (docs/PLATFORM.md)
+	plugins: [everWorld()],
 	build: {
 		outDir: '../public',
 		emptyOutDir: true,
@@ -17,6 +29,7 @@ export default defineConfig({
 		target: 'es2022',
 		sourcemap: true,
 		chunkSizeWarningLimit: 900,
+		rollupOptions: {output: {manualChunks}},
 	},
 	esbuild: {target: 'es2022'},
 	optimizeDeps: {esbuildOptions: {target: 'es2022'}},

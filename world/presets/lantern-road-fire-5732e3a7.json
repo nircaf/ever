@@ -1,0 +1,23 @@
+{
+	"v": 1,
+	"type": "preset",
+	"origin": {
+		"src": "studio",
+		"at": "2026-10-31"
+	},
+	"id": "lantern-road-fire",
+	"themes": [
+		"lantern"
+	],
+	"proposal": {
+		"kind": "line",
+		"data": {
+			"npc": "marcus",
+			"when": {
+				"theme": "lantern",
+				"trust": "trusting"
+			},
+			"text": "A reader lit the road fire once. I still look for it at dusk."
+		}
+	}
+}
